@@ -1,0 +1,26 @@
+# Postman Replicate - source only; generated/local files are ignored.
+
+# App data: collections, environments, globals, history, settings, cookies.
+# Deleting this folder resets the app.
+/data/
+
+# Electron/Chromium profile (cache, cookies, session) created by the shell.
+/userdata/
+
+# Logs and crash dumps
+*.log
+npm-debug.log*
+yarn-error.log*
+Crashpad/
+
+# Dependencies (the app itself has none; kept for safety)
+/node_modules/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.idea/
+.vscode/

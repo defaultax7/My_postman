@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Postman Replicate - Missing Feature Backlog</title>
+<style>
+  :root { --bg:#141414; --panel:#1d1d1d; --panel2:#242424; --line:#333; --fg:#e8e8e8; --dim:#9a9a9a; --faint:#6e6e6e;
+          --orange:#ff6c37; --green:#6bd968; --yellow:#e6c84a; --blue:#6ba7ff; --red:#ff6b6b; --purple:#c586ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 "Segoe UI",system-ui,sans-serif; }
+  header { padding:22px 26px 8px; border-bottom:1px solid var(--line); position:sticky; top:0; background:linear-gradient(var(--bg) 80%,transparent); backdrop-filter:blur(6px); z-index:5; }
+  h1 { margin:0 0 4px; font-size:22px; }
+  .sub { color:var(--dim); }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; margin:12px 0 6px; font-size:13px; color:var(--dim); }
+  .legend b { color:var(--fg); }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+  .controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0 14px; }
+  input[type=search], select { background:var(--panel2); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:7px 10px; font:inherit; }
+  input[type=search] { width:320px; }
+  .chips button { background:var(--panel2); color:var(--dim); border:1px solid var(--line); border-radius:999px; padding:5px 12px; font:inherit; cursor:pointer; }
+  .chips button.active { background:var(--orange); border-color:var(--orange); color:#fff; }
+  .stats { display:flex; gap:18px; flex-wrap:wrap; color:var(--dim); font-size:13px; padding:0 26px 12px; }
+  .stats b { color:var(--fg); font-size:15px; }
+  main { padding:8px 26px 60px; max-width:1250px; }
+  section { margin:26px 0 10px; }
+  h2 { font-size:16px; margin:0 0 8px; padding-bottom:6px; border-bottom:1px solid var(--line); }
+  h2 .n { color:var(--faint); font-weight:400; font-size:13px; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; color:var(--faint); font-size:11px; text-transform:uppercase; letter-spacing:.6px; padding:6px 8px; border-bottom:1px solid var(--line); }
+  td { padding:8px; border-bottom:1px solid #262626; vertical-align:top; }
+  tr:hover td { background:#1a1a1a; }
+  td.name { font-weight:600; white-space:nowrap; }
+  td.desc { color:var(--dim); }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .missing { background:rgba(255,107,107,.14); color:var(--red); }
+  .partial { background:rgba(230,200,74,.14); color:var(--yellow); }
+  .have { background:rgba(107,217,104,.14); color:var(--green); }
+  .cloud { background:rgba(197,134,255,.14); color:var(--purple); }
+  .offline { color:var(--dim); font-size:12px; white-space:nowrap; }
+  .prio { font-family:Consolas,monospace; font-weight:700; font-size:12px; }
+  .p1 { color:var(--orange); } .p2 { color:var(--yellow); } .p3 { color:var(--faint); }
+  footer { color:var(--faint); padding:0 26px 40px; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Postman Replicate - Missing Feature Backlog</h1>
+  <div class="sub">Gap list for the new desktop client (v0.1) compared with Postman desktop 11.94.0 - <span id="stamp"></span></div>
+  <div class="legend">
+    <span><span class="dot" style="background:var(--red)"></span><b>missing</b></span>
+    <span><span class="dot" style="background:var(--yellow)"></span><b>partial</b></span>
+    <span><span class="dot" style="background:var(--green)"></span><b>already implemented</b> (kept for context)</span>
+    <span><span class="dot" style="background:var(--purple)"></span><b>cloud-only</b> - cannot run fully offline by nature</span>
+  </div>
+  <div class="controls">
+    <input id="q" type="search" placeholder="Filter features...">
+    <div class="chips" id="statusChips">
+      <button data-status="open" class="active">missing + partial</button>
+      <button data-status="missing">missing</button>
+      <button data-status="partial">partial</button>
+      <button data-status="have">implemented</button>
+      <button data-status="all">all</button>
+    </div>
+    <div class="chips" id="prioChips">
+      <button data-prio="all" class="active">all priorities</button>
+      <button data-prio="P1">P1</button>
+      <button data-prio="P2">P2</button>
+      <button data-prio="P3">P3</button>
+    </div>
+  </div>
+</header>
+
+<div class="stats" id="stats"></div>
+<main id="main"></main>
+<footer>
+  Priority legend: <b class="p1">P1</b> = needed for daily driving, <b class="p2">P2</b> = important, <b class="p3">P3</b> = nice to have.<br>
+  "offline?" says whether the feature can work with no internet at all. Cloud-only items would need a server/account and are intentionally out of scope for an offline client.
+</footer>
+
+<script>
+const DATA = [
+  { cat: "Protocols & transports", items: [
+    ["WebSocket client (connect, send/receive frames, headers, close)", "missing", "P1", "yes", "Postman has a full WS tab: handshake, message log, ping, protocols."],
+    ["Socket.IO client", "missing", "P3", "yes", "Postman supports both v2 and v4 Socket.IO."],
+    ["gRPC + server reflection + streaming", "missing", "P2", "yes", "Postman ships @postman/grpc-js and grpc-reflection with proto import."],
+    ["MQTT client (publish/subscribe)", "missing", "P3", "yes", "Postman bundles mqtt for broker testing."],
+    ["Server-Sent Events (SSE) stream view", "missing", "P3", "yes", "Live event list for text/event-stream responses."],
+    ["GraphQL subscriptions (WS transport)", "missing", "P3", "yes", "Postman supports subscription operations over WebSocket."],
+    ["SOAP/WSDL helper + envelope generation", "missing", "P3", "yes", "WSDL import and SOAP body scaffolding."],
+    ["Custom / arbitrary HTTP methods", "partial", "P2", "yes", "Dropdown is fixed to 7 verbs; Postman allows typing any method."],
+    ["HTTP version pinning (HTTP/1.1 vs HTTP/2, HTTP/3)", "missing", "P2", "yes", "Force protocol per request."],
+    ["Proxy configuration (HTTP/SOCKS5, PAC, system, auth)", "missing", "P1", "yes", "No proxy UI at all today; only direct connections."],
+    ["Client certificates (PEM / PKCS#12) and custom CA", "missing", "P2", "yes", "mTLS and private CA trust per request."],
+    ["DNS override / hosts mapping per request", "missing", "P3", "yes", "Postman can resolve a hostname to a chosen IP."],
+    ["IPv4/IPv6 preference and keep-alive controls", "missing", "P3", "yes", "Force IPv4, connection reuse settings."],
+    ["Cancel an in-flight request", "missing", "P1", "yes", "No abort button while Sending; a slow/streaming call cannot be stopped."],
+    ["Retry policy (count/backoff) per request", "missing", "P3", "yes", "Automatic retries on failure."],
+    ["Streaming/large uploads without buffering", "partial", "P2", "yes", "Bodies are buffered in memory (base64 for files) with no size guard."],
+    ["Streamed responses to disk above cap", "partial", "P2", "yes", "64 MB cap, then truncated; no stream-to-file mode."],
+    ["Binary hex viewer", "missing", "P2", "yes", "Currently binary responses show base64 text only."],
+    ["HTTP interceptor / proxy capture (browser traffic)", "missing", "P2", "yes", "Live capture of other apps via local proxy + cert trust."],
+    ["HAR import/export", "missing", "P2", "yes", "Record and replay browser network captures."],
+    ["Network console / capture session view", "missing", "P3", "yes", "Postman's built-in proxy inspection UI."]
+  ]},
+  { cat: "Authentication", items: [
+    ["OAuth 2.0 authorization-code / PKCE / device flows with callback", "missing", "P1", "yes", "Only a pasted token is supported today; Postman runs the full offline-capable flow against any IdP."],
+    ["OAuth 1.0a signing", "missing", "P3", "yes", "Consumer/secret/token signature."],
+    ["AWS Signature v4", "missing", "P2", "yes", "Service/region/access-key signing, common for API testing."],
+    ["Digest, NTLM, Hawk, Akamai EdgeGrid, ASAP (Atlassian), JWT bearer", "missing", "P3", "yes", "Exotic auth helpers Postman ships."],
+    ["Inherit auth from collection / folder", "missing", "P2", "yes", "Set auth once at a parent level."],
+    ["Automatic token refresh + token cache", "missing", "P3", "yes", "Refresh OAuth2 tokens before expiry."],
+    ["Vault / secret-manager integrations (HashiCorp, Azure, 1Password)", "missing", "P3", "partial", "Cloud ones need accounts; a local encrypted vault would work offline."],
+    ["Client certificate auth flow in UI", "missing", "P3", "yes", "Pick a cert per request/host."]
+  ]},
+  { cat: "Request construction", items: [
+    ["Code generation to 20+ languages/frameworks", "partial", "P1", "yes", "Only \"Copy as cURL\" exists; Postman generates JS, Python, Go, Java, C#, PHP, Rust, Swift..."],
+    ["form-data: per-file content type + multiple files per key", "partial", "P2", "yes", "Engine supports contentType but UI has one file per field and no MIME picker."],
+    ["x-www-form-urlencoded bulk edit mode", "missing", "P3", "yes", "Postman's bulk key=value editor."],
+    ["GraphQL schema introspection + query autocomplete", "missing", "P2", "yes", "Fetch SDL and autocomplete fields/variables."],
+    ["Deep variable autocomplete + inline highlighting in editors", "missing", "P2", "yes", "Suggest {{env vars}} and underline unresolved ones."],
+    ["Request templates / built-in examples", "missing", "P3", "yes", "Starter requests for common APIs."],
+    ["Per-request cookie editor", "partial", "P2", "yes", "Global jar exists, but no cookie manager/editor UI."],
+    ["MIME sniffing for uploaded files", "missing", "P3", "yes", "Set Content-Type from file extension."]
+  ]},
+  { cat: "Response handling", items: [
+    ["Timing breakdown UI (DNS/TCP/TLS/first byte/download)", "partial", "P1", "yes", "Engine records all phases; the response bar only shows total time."],
+    ["Response body search / highlight", "missing", "P2", "yes", "Find in large JSON/HTML responses."],
+    ["JSONPath / XPath extraction and copy", "missing", "P2", "yes", "Click-to-copy a value from a JSON tree."],
+    ["Collapsible JSON tree viewer", "missing", "P1", "yes", "Currently pretty-printed text only."],
+    ["Save response as example / mock response", "missing", "P2", "yes", "Attach a canned response to a saved request."],
+    ["Response diff (compare two responses)", "missing", "P3", "yes", "Side-by-side diff viewer."],
+    ["Visualizer (Handlebars templates, charts, tables)", "missing", "P3", "yes", "Render custom response views via pm.visualizer."],
+    ["PDF / image / audio / video preview", "missing", "P3", "yes", "Inline media viewers."],
+    ["HTML preview with injected base URL / JS sandbox controls", "partial", "P3", "yes", "We have a sandboxed iframe only."],
+    ["XML / HTML auto-format", "partial", "P2", "yes", "Only JSON is pretty-printed automatically."],
+    ["Cookies: per-domain manager, edit/add/delete", "missing", "P2", "yes", "We only expose 'clear jar'."],
+    ["TLS certificate chain viewer", "missing", "P3", "yes", "Inspect server certs from the response."],
+    ["Response headers filter/search", "missing", "P3", "yes", "Quick find across headers."]
+  ]},
+  { cat: "Scripts & testing", items: [
+    ["async/await and promises in scripts", "missing", "P1", "yes", "Runner is synchronous; async code cannot be awaited."],
+    ["pm.sendRequest (chain calls inside scripts)", "missing", "P1", "yes", "Essential for auth setup and request chaining."],
+    ["pm.iterationData (data-driven runs)", "missing", "P2", "yes", "Access CSV/JSON row data per iteration."],
+    ["pm.visualizer, pm.execution, pm.cookies, pm.info scopes", "partial", "P2", "yes", "Only a subset of the pm API exists."],
+    ["Full Chai assertion library", "partial", "P2", "yes", "Our pm.expect covers common matchers only."],
+    ["JSON schema (tv4) validation helpers", "missing", "P3", "yes", "pm.response.to.have.jsonSchema()."],
+    ["Bundled libraries (lodash, moment, cheerio, CryptoJS, uuid)", "missing", "P2", "yes", "Postman's sandbox exposes these to scripts."],
+    ["Collection-level and folder-level scripts", "missing", "P2", "yes", "Run setup/teardown around every request in a group."],
+    ["Script line-number error traces + debuggable stack", "partial", "P3", "yes", "Errors are strings today."],
+    ["Configurable script timeout", "partial", "P3", "yes", "Fixed at 5 seconds."]
+  ]},
+  { cat: "Collections & runner", items: [
+    ["Drag & drop reorder, move, duplicate items", "missing", "P1", "yes", "Tree is append-only today."],
+    ["Collection variables editor UI", "partial", "P2", "yes", "Engine resolves them; no editor screen."],
+    ["Collection / folder description & docs rendering", "partial", "P3", "yes", "Stored but not shown."],
+    ["Search across collections and requests", "missing", "P1", "yes", "No search box yet."],
+    ["Collection Runner (iterations, delay, order, report)", "missing", "P1", "yes", "Batch-run a folder/collection with a results report."],
+    ["Data-file driven runs (CSV/JSON)", "missing", "P2", "yes", "One row per iteration."],
+    ["Local mock servers", "missing", "P3", "yes", "Serve saved examples on localhost."],
+    ["Examples / saved responses per request", "missing", "P2", "yes", "Mock + documentation use."],
+    ["Import Postman v1/v2.0 collections", "missing", "P2", "yes", "Only v2.1 is parsed today."],
+    ["Import OpenAPI/Swagger, RAML, WSDL, GraphQL SDL, HAR, Insomnia", "missing", "P2", "yes", "Postman converts all of these to requests."],
+    ["Export as OpenAPI / HAR", "missing", "P3", "yes", "Reverse of the above."],
+    ["Schema validation of imported collections", "missing", "P3", "yes", "Validate against the v2.1 JSON schema."],
+    ["CLI runner (newman-style) export", "missing", "P3", "yes", "Headless runs from a terminal."],
+    ["Workspaces, teams, sharing, comments, fork/merge, version history", "cloud", "n/a", "no", "Requires Postman cloud."]
+  ]},
+  { cat: "Environments & variables", items: [
+    ["Full dynamic variable set ($randomUUID, $randomEmail, $randomCity, $randomDate, $randomPrice, ...)", "partial", "P2", "yes", "We implement $guid, $timestamp, $randomInt, $isoTimestamp only."],
+    ["Environment import/export (JSON)", "missing", "P1", "yes", "Move environments between machines like Postman does."],
+    ["Secret variable masking", "missing", "P2", "yes", "Hide values like tokens in the UI."],
+    ["Variable hints / autocomplete / unresolved highlighting", "missing", "P2", "yes", "Editor affordances for {{vars}}."],
+    ["Session/local variable editor", "partial", "P3", "yes", "Script-only today."],
+    ["Environment quick-edit drawer from the top bar", "partial", "P3", "yes", "We have a full modal instead."]
+  ]},
+  { cat: "Editor & UI", items: [
+    ["Code editor engine (Monaco-class): syntax highlight, line numbers, folding", "missing", "P1", "yes", "Current editors are plain textareas."],
+    ["Find & replace, multi-cursor, bracket matching", "missing", "P2", "yes", "Standard editor features."],
+    ["Sidebar search/filter and item counts", "missing", "P1", "yes", "No filter box today."],
+    ["Tab drag-reorder, close others, tab context menu", "missing", "P3", "yes", "Basic tabs only."],
+    ["Command palette / quick open", "missing", "P3", "yes", "Ctrl+K style actions."],
+    ["Settings screen (font size, wrap, proxy, certs, shortcuts)", "partial", "P2", "yes", "Only a theme toggle exists."],
+    ["Configurable keyboard shortcuts", "missing", "P3", "yes", "Fixed shortcuts today."],
+    ["Layout switching (vertical/horizontal split), fullscreen response", "partial", "P3", "yes", "Draggable split exists; no layout presets."],
+    ["Sidebar resize/collapse", "partial", "P3", "yes", "Fixed width."],
+    ["Localization / i18n", "missing", "P3", "yes", "English only."],
+    ["Custom themes / theme editor", "missing", "P3", "yes", "Dark + light presets only."],
+    ["Accessibility pass (keyboard navigation, ARIA)", "partial", "P3", "yes", "Basic tab order only."],
+    ["Notifications for failed tests / long runs", "missing", "P3", "yes", "Silent today."],
+    ["Editor autocomplete for HTTP headers and methods", "missing", "P3", "yes", "Quality-of-life."]
+  ]},
+  { cat: "Desktop & OS integration", items: [
+    ["Drag & drop files onto a request/body", "missing", "P2", "yes", "File picker only."],
+    ["postman:// style deep links / protocol handler", "missing", "P3", "yes", "Open a request from another tool."],
+    ["In-app log viewer + export", "missing", "P3", "yes", "Logs are written but not viewable."],
+    ["Certificate trust store installation (proxy CA)", "missing", "P2", "yes", "Needed for HTTPS capture."],
+    ["System tray / background runner", "missing", "P3", "yes", "For monitor-style local runs."],
+    ["Multiple windows / detachable tabs", "missing", "P3", "yes", "Single window today."],
+    ["Auto-update", "missing", "n/a", "no", "Intentionally removed for offline use; rebuild instead."],
+    ["Crash reporting / telemetry", "missing", "n/a", "no", "Intentionally absent (privacy + offline)."],
+    ["AI assistant (request/test generation)", "cloud", "n/a", "partial", "Postman Postbot uses cloud AI; a local model could be added offline."],
+    ["MCP server / agent integrations", "missing", "P3", "yes", "Postman 11.x can expose collections to agents."],
+    ["Performance testing + metrics store (DuckDB)", "missing", "P3", "yes", "Load-test a request/collection and chart results."],
+    ["API governance / linting rules", "cloud", "n/a", "partial", "Cloud rule engine; a local linter subset is possible."],
+    ["Monitors, scheduled runs, cloud mocks, publishing/docs", "cloud", "n/a", "no", "Server-side features."]
+  ]}
+];
+
+const STATUS_LABEL = { missing: "missing", partial: "partial", have: "implemented", cloud: "cloud-only" };
+const state = { status: "open", prio: "all", q: "" };
+
+function matches(item) {
+  const [name, status, prio, offline, desc] = item;
+  if (state.status === "open" && status !== "missing" && status !== "partial") return false;
+  if (state.status !== "open" && state.status !== "all" && status !== state.status) return false;
+  if (state.prio !== "all" && prio !== state.prio) return false;
+  if (state.q) {
+    const hay = (name + " " + desc).toLowerCase();
+    if (!hay.includes(state.q.toLowerCase())) return false;
+  }
+  return true;
+}
+
+function render() {
+  const main = document.getElementById("main");
+  main.innerHTML = "";
+  const counts = { missing: 0, partial: 0, have: 0, cloud: 0, shown: 0, total: 0 };
+  for (const section of DATA) {
+    const rows = section.items.filter(matches);
+    for (const it of section.items) counts[it[1]]++;
+    counts.total += section.items.length;
+    if (!rows.length) continue;
+    counts.shown += rows.length;
+    const sec = document.createElement("section");
+    sec.innerHTML = `<h2>${section.cat} <span class="n">(${rows.length})</span></h2>`;
+    const table = document.createElement("table");
+    table.innerHTML = "<tr><th style='width:34%'>Feature</th><th>Why it matters / notes</th><th style='width:110px'>Status</th><th style='width:70px'>Prio</th><th style='width:90px'>Offline?</th></tr>";
+    for (const [name, status, prio, offline, desc] of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td class="name">${name}</td><td class="desc">${desc}</td>` +
+        `<td><span class="badge ${status}">${STATUS_LABEL[status]}</span></td>` +
+        `<td class="prio ${prio.toLowerCase()}">${prio === "n/a" ? "-" : prio}</td>` +
+        `<td class="offline">${offline}</td>`;
+      table.appendChild(tr);
+    }
+    sec.appendChild(table);
+    main.appendChild(sec);
+  }
+  if (!counts.shown) main.innerHTML = "<p style='color:var(--faint)'>No features match the current filter.</p>";
+  document.getElementById("stats").innerHTML =
+    `<span><b>${counts.total}</b> tracked features</span>` +
+    `<span><b style="color:var(--red)">${counts.missing}</b> missing</span>` +
+    `<span><b style="color:var(--yellow)">${counts.partial}</b> partial</span>` +
+    `<span><b style="color:var(--green)">${counts.have}</b> implemented</span>` +
+    `<span><b style="color:var(--purple)">${counts.cloud}</b> cloud-only</span>` +
+    `<span>showing <b>${counts.shown}</b></span>`;
+}
+
+document.getElementById("q").addEventListener("input", (e) => { state.q = e.target.value; render(); });
+for (const btn of document.querySelectorAll("#statusChips button")) {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#statusChips button").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.status = btn.dataset.status;
+    render();
+  });
+}
+for (const btn of document.querySelectorAll("#prioChips button")) {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#prioChips button").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.prio = btn.dataset.prio;
+    render();
+  });
+}
+document.getElementById("stamp").textContent = new Date().toISOString().slice(0, 10);
+render();
+</script>
+</body>
+</html>

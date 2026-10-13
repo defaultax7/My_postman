@@ -1,0 +1,8 @@
+{
+  "name": "postman-replicate",
+  "productName": "Postman Replicate",
+  "version": "0.1.0",
+  "description": "Offline desktop API client - new implementation",
+  "main": "main.js",
+  "private": true
+}

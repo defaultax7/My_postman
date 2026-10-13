@@ -1,0 +1,267 @@
+"use strict";
+/* Drives the real desktop app through CDP: send, save, env vars, persistence.
+   Usage: node test/drive.js ws://127.0.0.1:9222/devtools/page/<id> */
+const wsUrl = process.argv[2];
+const BASE = process.argv[3] || "http://127.0.0.1:8787";
+if (!wsUrl) {
+  console.error("usage: node test/drive.js <ws-url> [base-url]");
+  process.exit(2);
+}
+const ws = new WebSocket(wsUrl);
+let id = 0;
+const pending = new Map();
+const problems = [];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function send(method, params) {
+  return new Promise((resolve) => {
+    const i = ++id;
+    pending.set(i, resolve);
+    ws.send(JSON.stringify({ id: i, method, params }));
+  });
+}
+async function evalJs(expression) {
+  const res = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+  if (res && res.exceptionDetails) {
+    problems.push("eval exception: " + JSON.stringify(res.exceptionDetails.exception && res.exceptionDetails.exception.description || res.exceptionDetails.text));
+    return undefined;
+  }
+  return res && res.result ? res.result.value : undefined;
+}
+async function waitFor(expression, timeoutMs, label) {
+  const deadline = Date.now() + (timeoutMs || 8000);
+  while (Date.now() < deadline) {
+    if (await evalJs(expression)) return true;
+    await sleep(200);
+  }
+  problems.push("timeout waiting for " + (label || expression));
+  return false;
+}
+function check(name, condition, extra) {
+  const detail = extra === undefined ? "" : String(JSON.stringify(extra)).slice(0, 400);
+  console.log((condition ? "  PASS " : "  FAIL ") + name + (condition ? "" : " :: " + detail));
+  if (!condition) problems.push(name + " " + detail);
+}
+
+ws.onmessage = (e) => {
+  const m = JSON.parse(e.data);
+  if (m.id && pending.has(m.id)) {
+    pending.get(m.id)(m.result || m.error);
+    pending.delete(m.id);
+    return;
+  }
+  if (m.method === "Runtime.exceptionThrown") {
+    problems.push("page exception: " + (m.params.exceptionDetails.exception && m.params.exceptionDetails.exception.description || m.params.exceptionDetails.text));
+  }
+  if (m.method === "Runtime.consoleAPICalled" && m.params.type === "error") {
+    const text = m.params.args.map((a) => a.value || a.description).join(" ");
+    if (!/Amplitude|LaunchDarkly|MaxListeners|DevTools/.test(text)) problems.push("console error: " + text.slice(0, 300));
+  }
+};
+
+ws.onopen = async () => {
+  await send("Runtime.enable");
+  await send("Log.enable");
+
+  console.log("boot");
+  const booted = await waitFor("typeof S !== 'undefined' && S.collections !== undefined && !!document.querySelector('#btn-send') && S.tabs.length > 0", 15000, "renderer boot");
+  check("renderer booted", booted);
+  if (!booted) return finish();
+
+  console.log("send request through the UI");
+  await evalJs(`(()=>{const u=document.querySelector('#url');u.value=${JSON.stringify(BASE + "/hello?x=1")};u.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#btn-send').click();return true})()`);
+  await waitFor("document.querySelector('#response-meta .badge')", 10000, "response badge");
+  const meta = await evalJs("document.querySelector('#response-meta').innerText");
+  const bodyText = await evalJs("document.querySelector('#response-body').innerText");
+  check("response 200", /200/.test(meta || ""), meta);
+  check("response body rendered", /rea-offline-test/.test(bodyText || ""), bodyText && bodyText.slice(0, 200));
+  check("history recorded", (await evalJs("S.history.length")) >= 1);
+
+  console.log("history stores request + response");
+  const histSnapshot = await evalJs("JSON.stringify({status:S.history[0].response && S.history[0].response.status, hasBody: !!(S.history[0].response && S.history[0].response.body && S.history[0].response.body.text), size: S.history[0].response && S.history[0].response.body && S.history[0].response.body.size, durationMs: S.history[0].durationMs})");
+  check("history snapshot has response", /"status":200/.test(histSnapshot || "") && /"hasBody":true/.test(histSnapshot || ""), histSnapshot);
+  await evalJs("S.activePanel='history'; renderSidebar(); 'ok'");
+  await sleep(300);
+  const histHtml = await evalJs("document.querySelector('#panel-history').innerText");
+  check("history list shows status + time", /200/.test(histHtml || "") && /(ms|s)\b/.test(histHtml || ""), (histHtml || "").slice(0, 160));
+  const tabsBefore = await evalJs("S.tabs.length");
+  await evalJs("(()=>{document.querySelector('#panel-history .hist-item').click();return 'ok'})()");
+  await waitFor("(()=>{const m=document.querySelector('#response-meta');return m && /history/.test(m.innerText)})()", 5000, "history response restored");
+  const restoredMeta = await evalJs("document.querySelector('#response-meta').innerText");
+  const restoredBody = await evalJs("document.querySelector('#response-body').innerText");
+  check("history click opened a tab", (await evalJs("S.tabs.length")) === tabsBefore + 1);
+  check("restored response marked as history", /history/i.test(restoredMeta || ""), restoredMeta);
+  check("restored response body rendered", /rea-offline-test/.test(restoredBody || ""), (restoredBody || "").slice(0, 160));
+  await evalJs("closeTab(S.activeTabId); 'ok'");
+  await sleep(300);
+  await evalJs("S.activePanel='collections'; renderSidebar(); 'ok'");
+
+  console.log("collection + save request");
+  await evalJs("void newCollection(); 'ok'");
+  await sleep(300);
+  await evalJs(`(()=>{const i=document.querySelector('#modal-root input[type=text]');i.value='My API';document.querySelector('#modal-root button.primary').click();return true})()`);
+  await sleep(400);
+  check("collection created", (await evalJs("S.collections.length")) === 1, await evalJs("JSON.stringify(S.collections.map(c=>c.name))"));
+  await evalJs("showSaveModal()");
+  await sleep(300);
+  await evalJs(`(()=>{const i=document.querySelector('#modal-root input[type=text]');i.value='Hello Request';const sel=document.querySelector('#modal-root select');sel.value=S.collections[0].id;sel.dispatchEvent(new Event('change'));return true})()`);
+  await sleep(200);
+  await evalJs("document.querySelector('#modal-root button.primary').click()");
+  await sleep(500);
+  check("request saved into collection", (await evalJs("S.collections[0].items.length")) === 1, await evalJs("JSON.stringify(S.collections[0].items.map(i=>i.name))"));
+  check("tab linked to saved item", !!(await evalJs("activeTab().saved && activeTab().saved.collectionId === S.collections[0].id")));
+
+  console.log("environment + variables");
+  await evalJs("void editEnvironment(null); 'ok'");
+  await sleep(300);
+  await evalJs(`(()=>{const i=document.querySelector('#modal-root input[type=text]');i.value='Local';const add=[...document.querySelectorAll('#modal-root .modal-body button')].find(b=>b.textContent.includes('Add variable'));add.click();return true})()`);
+  await sleep(250);
+  await evalJs(`(()=>{const rows=document.querySelectorAll('#modal-root .kv-table tr');const r=rows[rows.length-1];const ins=r.querySelectorAll('input[type=text]');ins[0].value='host';ins[0].dispatchEvent(new Event('input',{bubbles:true}));ins[1].value=${JSON.stringify(BASE)};ins[1].dispatchEvent(new Event('input',{bubbles:true}));return true})()`);
+  await evalJs("document.querySelector('#modal-root button.primary').click()");
+  await sleep(500);
+  check("environment created", (await evalJs("S.environments.length")) === 1, await evalJs("JSON.stringify(S.environments.map(e=>e.name))"));
+  await evalJs(`(()=>{const sel=document.querySelector('#env-select');sel.value=S.environments[0].id;sel.dispatchEvent(new Event('change'));return true})()`);
+  await sleep(200);
+  await evalJs("newTab()");
+  await sleep(300);
+  await evalJs(`(()=>{const u=document.querySelector('#url');u.value='{{host}}/hello?var=1';u.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#btn-send').click();return true})()`);
+  await waitFor("document.querySelector('#response-body').innerText.includes('rea-offline-test')", 10000, "variable response");
+  const varBody = await evalJs("document.querySelector('#response-body').innerText");
+  check("{{host}} variable resolved", /rea-offline-test/.test(varBody || ""), varBody && varBody.slice(0, 160));
+  const noMissing = !/Unresolved variables/.test(varBody || "");
+  check("no unresolved variables", noMissing);
+
+  console.log("scripts");
+  await evalJs(`(()=>{const t=activeTab();t.request.scripts.tests="pm.test('status 200',()=>pm.response.to.have.status(200));pm.test('ok true',()=>pm.expect(pm.response.json().ok).to.be.true);";t.request.scripts.preRequest="pm.environment.set('scripted','yes');";document.querySelector('#btn-send').click();return true})()`);
+  await waitFor("activeTab().testResults && activeTab().testResults.length >= 2", 10000, "tests");
+  const tests = await evalJs("JSON.stringify(activeTab().testResults)");
+  check("tests ran + passed", /"passed":true/.test(tests || "") && !/"passed":false/.test(tests || ""), tests);
+  const envScripted = await evalJs("(S.environments[0].values||[]).some(v=>v.key==='scripted'&&v.value==='yes')");
+  check("pre-request mutated environment", !!envScripted);
+
+  console.log("drag & drop move + duplicate");
+  await evalJs("duplicateItem(S.collections[0], S.collections[0].items[0]); 'ok'");
+  await sleep(400);
+  let names = await evalJs("JSON.stringify(S.collections[0].items.map(i=>i.name))");
+  check("duplicate item added", (await evalJs("S.collections[0].items.length")) === 2, names);
+  await evalJs("(()=>{const c=S.collections[0];const a=c.items[0].id,b=c.items[1].id;c.items[1].name='Duplicate A';moveNode({kind:'item',collectionId:c.id,itemId:b},{kind:'item',collectionId:c.id,itemId:a,position:'before'});return 'ok'})()");
+  await sleep(300);
+  names = await evalJs("JSON.stringify(S.collections[0].items.map(i=>i.name))");
+  check("item reordered before target", /^\["Duplicate A",/.test(names || ""), names);
+  await evalJs("duplicateCollection(S.collections[0]); 'ok'");
+  await sleep(300);
+  check("collection duplicated", (await evalJs("S.collections.length")) === 2);
+  await evalJs("(()=>{const a=S.collections[0].id,b=S.collections[1].id;moveNode({kind:'collection',collectionId:b},{kind:'collection',collectionId:a,position:'before'});return 'ok'})()");
+  await sleep(300);
+  const order = await evalJs("JSON.stringify(S.collections.map(c=>c.name))");
+  check("collection reordered", /copy/.test(order.split(",")[0] || ""), order);
+  await evalJs("(()=>{const dup=S.collections.find(c=>/copy/.test(c.name)); S.collections=S.collections.filter(c=>c!==dup); saveCollections(); renderCollections(); return 'ok'})()");
+  await sleep(200);
+
+  console.log("descriptions + docs rendering");
+  await evalJs("(()=>{S.collections[0].description='# My API\\n\\nUse **v2** endpoints.\\n\\n- one\\n- two'; return 'ok'})()");
+  await evalJs("openDocsModal(S.collections[0], S.collections[0], 'collection'); 'ok'");
+  await sleep(300);
+  const docsHtml = await evalJs("document.querySelector('#modal-root .docs-view').innerHTML");
+  check("markdown heading rendered", /<h1>My API<\/h1>/.test(docsHtml || ""), docsHtml && docsHtml.slice(0, 200));
+  check("markdown bold + list rendered", /<b>v2<\/b>/.test(docsHtml || "") && /<li>one<\/li>/.test(docsHtml || ""), docsHtml && docsHtml.slice(0, 300));
+  check("contents index lists requests", /Hello Request/.test(docsHtml || ""));
+  await evalJs("document.querySelector('#modal-root button.primary').click()");
+  await sleep(300);
+  check("description saved", (await evalJs("S.collections[0].description.includes('Use **v2**')")) === true);
+
+  console.log("collection runner");
+  await evalJs("openRunnerModal({collection:S.collections[0], folder:null}); 'ok'");
+  await sleep(400);
+  await evalJs("(()=>{const inputs=document.querySelectorAll('#modal-root .modal-body input[type=number]');inputs[0].value=2;inputs[0].dispatchEvent(new Event('input',{bubbles:true}));return 'ok'})()");
+  await evalJs("(()=>{const b=[...document.querySelectorAll('#modal-root button')].find(x=>x.textContent.trim()==='Run');b.click();return 'ok'})()");
+  await waitFor("(()=>{const h=[...document.querySelectorAll('#modal-root .runner .hint')].pop();return h && /Done:|Stopped/.test(h.textContent)})()", 30000, "runner completion");
+  const runSummary = await evalJs("(()=>{const h=[...document.querySelectorAll('#modal-root .runner .hint')].pop();return h?h.textContent:''})()");
+  check("runner executed 2 iterations x 2 requests", /4 request\(s\)/.test(runSummary || "") && /0 error/.test(runSummary || ""), runSummary);
+  check("runner results table has 4 rows", (await evalJs("document.querySelectorAll('#modal-root .runner-table tr').length")) === 4, await evalJs("document.querySelectorAll('#modal-root .runner-table tr').length"));
+  check("runner enabled report export", (await evalJs("(()=>{const b=[...document.querySelectorAll('#modal-root button')].find(x=>x.textContent.trim()==='Report JSON');return b && !b.disabled})()")) === true);
+  await evalJs("(()=>{const b=[...document.querySelectorAll('#modal-root button')].find(x=>x.textContent.trim()==='Close');if(b)b.click();return 'ok'})()");
+  await sleep(300);
+
+  console.log("import Postman v1 workspace");
+  const v1Workspace = {
+    collections: [{
+      id: "wc1", name: "V1 In", description: "legacy", order: ["wr1"],
+      folders: [],
+      requests: [{ id: "wr1", name: "V1 Request", method: "GET", url: "https://example.com/legacy?z=9", headers: "X-L: 1" }],
+    }],
+    environments: [{ name: "V1 Env", values: [{ key: "a", value: "1", enabled: true }] }],
+    globals: [{ key: "g1", value: "x", enabled: true }],
+  };
+  await evalJs("openImportModal(); 'ok'");
+  await sleep(300);
+  await evalJs(`(()=>{document.querySelector('#modal-root textarea').value=${JSON.stringify(JSON.stringify(v1Workspace))};return 'ok'})()`);
+  await evalJs("(()=>{const b=[...document.querySelectorAll('#modal-root button')].find(x=>x.textContent.trim()==='Import');b.click();return 'ok'})()");
+  await sleep(800);
+  check("v1 collection imported via UI", (await evalJs("S.collections.some(c=>c.name==='V1 In')")) === true, await evalJs("JSON.stringify(S.collections.map(c=>c.name))"));
+  check("v1 environment imported via UI", (await evalJs("S.environments.some(e=>e.name==='V1 Env')")) === true, await evalJs("JSON.stringify(S.environments.map(e=>e.name))"));
+  check("v1 import kept query params", (await evalJs("(()=>{const c=S.collections.find(c=>c.name==='V1 In');return c.items[0].request.params[0].key==='z'})()")) === true);
+
+  console.log("TLS settings UI + mTLS send through IPC");
+  const os = require("os");
+  const fs = require("fs");
+  const https = require("https");
+  const { execFileSync } = require("child_process");
+  let mtlsOk = false;
+  try {
+    const dir = fs.mkdtempSync(require("path").join(os.tmpdir(), "repl-drive-certs-"));
+    const run = (args) => execFileSync("openssl", args, { cwd: dir, stdio: "pipe" });
+    run(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "ca.key", "-out", "ca.crt", "-days", "2", "-subj", "/CN=Drive Test CA"]);
+    run(["req", "-newkey", "rsa:2048", "-nodes", "-keyout", "server.key", "-out", "server.csr", "-subj", "/CN=localhost"]);
+    fs.writeFileSync(`${dir}/san.cnf`, "subjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n");
+    run(["x509", "-req", "-in", "server.csr", "-CA", "ca.crt", "-CAkey", "ca.key", "-CAcreateserial", "-out", "server.crt", "-days", "2", "-extfile", "san.cnf"]);
+    run(["req", "-newkey", "rsa:2048", "-nodes", "-keyout", "client.key", "-out", "client.csr", "-subj", "/CN=drive-client"]);
+    fs.writeFileSync(`${dir}/client.cnf`, "extendedKeyUsage=clientAuth\n");
+    run(["x509", "-req", "-in", "client.csr", "-CA", "ca.crt", "-CAkey", "ca.key", "-CAcreateserial", "-out", "client.crt", "-days", "2", "-extfile", "client.cnf"]);
+    const tlsServer = https.createServer(
+      { key: fs.readFileSync(`${dir}/server.key`), cert: fs.readFileSync(`${dir}/server.crt`), ca: fs.readFileSync(`${dir}/ca.crt`), requestCert: true, rejectUnauthorized: true },
+      (req, res) => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify({ ok: true, client: req.socket.getPeerCertificate().subject.CN })); }
+    );
+    await new Promise((r) => tlsServer.listen(0, "127.0.0.1", r));
+    const tlsUrl = `https://localhost:${tlsServer.address().port}/hello`;
+    await evalJs("newTab(); 'ok'");
+    await sleep(300);
+    await evalJs(`(()=>{const t=activeTab();t.request.url=${JSON.stringify(tlsUrl)};t.request.settings.tls={clientCert:true,type:'pem',certPath:${JSON.stringify(dir + "/client.crt")},keyPath:${JSON.stringify(dir + "/client.key")},caPath:${JSON.stringify(dir + "/ca.crt")},pfxPath:'',passphrase:''};t.requestSubTab='settings';document.querySelector('#url').value=t.request.url;renderRequestPane();return 'ok'})()`);
+    await sleep(300);
+    const settingsHtml = await evalJs("document.querySelector('#request-body').innerText");
+    check("TLS settings section rendered", /Client certificate/i.test(settingsHtml || "") && /Custom CA/i.test(settingsHtml || ""), (settingsHtml || "").slice(0, 200));
+    await evalJs("document.querySelector('#btn-send').click(); 'ok'");
+    await waitFor("document.querySelector('#response-meta .badge')", 15000, "mTLS response");
+    const meta = await evalJs("document.querySelector('#response-meta').innerText");
+    const body = await evalJs("document.querySelector('#response-body').innerText");
+    check("mTLS send via UI got 200", /200/.test(meta || ""), meta);
+    check("server saw client cert CN", /drive-client/.test(body || ""), (body || "").slice(0, 160));
+    mtlsOk = true;
+    tlsServer.close();
+  } catch (e) {
+    console.log("  SKIP GUI mTLS (openssl unavailable or failed):", e.message.slice(0, 160));
+  }
+
+  console.log("persistence (reload)");
+  await evalJs("saveSession()");
+  await sleep(400);
+  await evalJs("location.reload()");
+  await sleep(1500);
+  const restored = await waitFor("typeof S !== 'undefined' && S.collections.length >= 1 && S.environments.length >= 1 && S.tabs.length >= 1", 15000, "reload boot");
+  check("state restored after reload", restored);
+  const state = await evalJs("JSON.stringify({tabs:S.tabs.length, cols:S.collections.length, items:S.collections[0].items.length, envs:S.environments.length, history:S.history.length})");
+  console.log("       state:", state);
+
+  finish();
+};
+
+function finish() {
+  console.log(problems.length ? `\n${problems.length} problem(s): ${problems.slice(0, 8).join(" | ")}` : "\nGUI drive: all checks passed");
+  ws.close();
+  process.exit(problems.length ? 1 : 0);
+}
+
+ws.onerror = (e) => {
+  console.error("WS error", e && e.message);
+  process.exit(2);
+};

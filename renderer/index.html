@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'">
+  <title>Postman Replicate</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-dark">
+  <header id="topbar">
+    <div class="brand"><span class="logo"></span> Postman Replicate</div>
+    <div class="topbar-actions">
+      <select id="env-select" title="Active environment"></select>
+      <button id="btn-manage-env" class="ghost">Environments</button>
+      <button id="btn-import" class="ghost">Import</button>
+      <button id="btn-theme" class="ghost" title="Toggle theme">◐</button>
+    </div>
+  </header>
+
+  <div id="layout">
+    <aside id="sidebar">
+      <div class="sidebar-tabs">
+        <button data-panel="collections" class="active">Collections</button>
+        <button data-panel="history">History</button>
+        <button data-panel="environments">Env</button>
+      </div>
+      <div id="sidebar-body">
+        <div class="panel" id="panel-collections"></div>
+        <div class="panel" id="panel-history" hidden></div>
+        <div class="panel" id="panel-environments" hidden></div>
+      </div>
+    </aside>
+
+    <div id="main">
+      <div id="tabs"></div>
+      <div id="workspace">
+        <section id="request-pane">
+          <div class="urlbar">
+            <select id="method" title="Method">
+              <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option>
+              <option>DELETE</option><option>HEAD</option><option>OPTIONS</option>
+            </select>
+            <input id="url" spellcheck="false" autocomplete="off" placeholder="Enter request URL  ({{variable}} supported)">
+            <button id="btn-send" class="primary">Send</button>
+            <button id="btn-save" class="ghost">Save</button>
+            <button id="btn-curl" class="ghost" title="Show cURL">cURL</button>
+          </div>
+          <div class="subtabs" id="request-tabs"></div>
+          <div id="request-body"></div>
+        </section>
+        <section id="response-pane">
+          <div id="response-meta" class="empty">Send a request to see the response</div>
+          <div class="subtabs" id="response-tabs"></div>
+          <div id="response-body" class="empty-body"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+  <script src="app.js"></script>
+</body>
+</html>
