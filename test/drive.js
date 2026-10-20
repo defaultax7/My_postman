@@ -123,6 +123,15 @@ ws.onopen = async () => {
   await evalJs("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); 'ok'");
   await sleep(200);
 
+  console.log("long collection/request names");
+  await evalJs("(()=>{const c=S.collections[0];c._oldName=c.name;c.items[0]._oldName=c.items[0].name;c.name='A very long collection name that should be truncated instead of wrapping';c.items[0].name='A very long request name that should be truncated instead of wrapping';renderCollections();return 'ok'})()");
+  await sleep(200);
+  const longNameState = await evalJs("(()=>{const col=document.querySelector('#panel-collections .tree-item b.tree-name');const req=[...document.querySelectorAll('#panel-collections .tree-name')].find(el=>el.title.startsWith('A very long request'));const style=getComputedStyle(req);return JSON.stringify({colTitle:col.title,colOverflow:getComputedStyle(col).textOverflow,colTruncated:col.scrollWidth>col.clientWidth,reqTitle:req.title,reqOverflow:style.textOverflow,reqWhiteSpace:style.whiteSpace,reqTruncated:req.scrollWidth>req.clientWidth,rowHeight:req.closest('.tree-item').getBoundingClientRect().height})})()");
+  check("long names use ellipsis", /colOverflow":"ellipsis"/.test(longNameState || "") && /reqOverflow":"ellipsis"/.test(longNameState || "") && /reqWhiteSpace":"nowrap"/.test(longNameState || ""), longNameState);
+  check("truncated names keep full hover title", /colTruncated":true/.test(longNameState || "") && /reqTruncated":true/.test(longNameState || "") && /A very long request name that should be truncated instead of wrapping/.test(longNameState || ""), longNameState);
+  await evalJs("(()=>{const c=S.collections[0];c.name=c._oldName;delete c._oldName;const req=c.items[0];req.name=req._oldName;delete req._oldName;renderCollections();return 'ok'})()");
+  await sleep(200);
+
   console.log("URL variable highlighting + ctrl+click");
   await evalJs("newTab(); 'ok'");
   await sleep(300);

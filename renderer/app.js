@@ -1367,7 +1367,7 @@ function renderCollectionNode(col, depth) {
       dragHandlers({ kind: "collection", collectionId: col.id }, false, { self: true })
     ),
     h("span", { text: col._open === false ? "▸" : "▾" }),
-    h("b", { text: col.name })
+    h("b", { class: "tree-name", title: col.name, text: col.name })
   );
   wrap.appendChild(header);
   if (col._open !== false) {
@@ -1399,7 +1399,7 @@ function renderItemNode(col, item, parent) {
           dragHandlers({ kind: "item", collectionId: col.id, itemId: item.id }, true)
         ),
         h("span", { text: item._open === false ? "▸" : "▾" }),
-        h("span", { text: "🗀 " + item.name })
+        h("span", { class: "tree-name", title: item.name, text: "🗀 " + item.name })
       )
     );
     if (item._open !== false) (item.items || []).forEach((child) => wrap.appendChild(renderItemNode(col, child, item)));
@@ -1416,7 +1416,7 @@ function renderItemNode(col, item, parent) {
           dragHandlers({ kind: "item", collectionId: col.id, itemId: item.id }, false)
         ),
         methodTag(item.request.method || "GET"),
-        h("span", { text: item.name })
+        h("span", { class: "tree-name", title: item.name, text: item.name })
       )
     );
   }
@@ -1686,7 +1686,7 @@ function renderEnvironmentsPanel() {
       h(
         "div",
         { class: "tree-item", onclick: () => editEnvironment(env) },
-        h("span", { text: env.name }),
+        h("span", { class: "tree-name", title: env.name, text: env.name }),
         h(
           "span",
           { class: "row-actions" },
