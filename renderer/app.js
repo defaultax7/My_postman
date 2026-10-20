@@ -1008,6 +1008,129 @@ function duplicateCollection(collection) {
   toast("Duplicated “" + collection.name + "”", "ok");
 }
 
+/* ------------------------------------------------------- context menu */
+let contextMenuEl = null;
+let contextMenuCleanup = null;
+
+function closeContextMenu() {
+  if (contextMenuEl) {
+    contextMenuEl.remove();
+    contextMenuEl = null;
+  }
+  if (contextMenuCleanup) {
+    contextMenuCleanup();
+    contextMenuCleanup = null;
+  }
+}
+
+function openContextMenu(event, entries) {
+  event.preventDefault();
+  event.stopPropagation();
+  closeContextMenu();
+
+  const menu = h("div", { class: "context-menu", role: "menu" });
+  for (const entry of entries) {
+    if (entry.separator) {
+      menu.appendChild(h("div", { class: "context-sep", role: "separator" }));
+      continue;
+    }
+    menu.appendChild(
+      h(
+        "button",
+        {
+          class: "context-item" + (entry.danger ? " danger" : ""),
+          type: "button",
+          role: "menuitem",
+          onclick: () => { closeContextMenu(); entry.action(); },
+        },
+        h("span", { class: "context-icon", text: entry.icon || "" }),
+        h("span", { text: entry.label })
+      )
+    );
+  }
+
+  document.body.appendChild(menu);
+  const pad = 6;
+  const rect = menu.getBoundingClientRect();
+  const x = Math.max(pad, Math.min(event.clientX, window.innerWidth - rect.width - pad));
+  const y = Math.max(pad, Math.min(event.clientY, window.innerHeight - rect.height - pad));
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
+  contextMenuEl = menu;
+
+  const onPointerDown = (e) => { if (!menu.contains(e.target)) closeContextMenu(); };
+  const onKeyDown = (e) => {
+    if (e.key === "Escape") { e.preventDefault(); closeContextMenu(); return; }
+    const items = Array.from(menu.querySelectorAll(".context-item"));
+    if (!items.length) return;
+    const index = items.indexOf(document.activeElement);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      items[(index + step + items.length) % items.length].focus();
+    } else if (e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      items[e.key === "Home" ? 0 : items.length - 1].focus();
+    }
+  };
+  const dismiss = () => closeContextMenu();
+  document.addEventListener("mousedown", onPointerDown, true);
+  document.addEventListener("keydown", onKeyDown, true);
+  window.addEventListener("blur", dismiss);
+  window.addEventListener("resize", dismiss);
+  window.addEventListener("scroll", dismiss, true);
+  contextMenuCleanup = () => {
+    document.removeEventListener("mousedown", onPointerDown, true);
+    document.removeEventListener("keydown", onKeyDown, true);
+    window.removeEventListener("blur", dismiss);
+    window.removeEventListener("resize", dismiss);
+    window.removeEventListener("scroll", dismiss, true);
+  };
+  const first = menu.querySelector(".context-item");
+  if (first) first.focus({ preventScroll: true });
+}
+
+function collectionContextMenu(col) {
+  return [
+    { label: "Run collection", icon: "▶", action: () => openRunnerModal({ collection: col, folder: null }) },
+    { label: "Docs", icon: "📄", action: () => openDocsModal(col, col, "collection") },
+    { separator: true },
+    { label: "New request", icon: "＋", action: () => addRequestTo(col, null) },
+    { label: "New folder", icon: "🗀", action: () => addFolderTo(col, null) },
+    { separator: true },
+    { label: "Duplicate", icon: "⧉", action: () => duplicateCollection(col) },
+    { label: "Export", icon: "⇧", action: () => exportCollection(col) },
+    { label: "Rename", icon: "✎", action: () => renameCollection(col) },
+    { separator: true },
+    { label: "Delete", icon: "✕", danger: true, action: () => deleteCollection(col) },
+  ];
+}
+
+function folderContextMenu(col, item, parent) {
+  return [
+    { label: "Run folder", icon: "▶", action: () => openRunnerModal({ collection: col, folder: item }) },
+    { label: "Docs", icon: "📄", action: () => openDocsModal(col, item, "folder") },
+    { separator: true },
+    { label: "New request", icon: "＋", action: () => addRequestTo(col, item) },
+    { separator: true },
+    { label: "Duplicate", icon: "⧉", action: () => duplicateItem(col, item) },
+    { label: "Rename", icon: "✎", action: () => renameItem(item) },
+    { separator: true },
+    { label: "Delete", icon: "✕", danger: true, action: () => deleteItem(col, item, parent) },
+  ];
+}
+
+function requestContextMenu(col, item, parent) {
+  return [
+    { label: "Docs", icon: "📄", action: () => openDocsModal(col, item, "request") },
+    { separator: true },
+    { label: "Duplicate", icon: "⧉", action: () => duplicateItem(col, item) },
+    { label: "Rename", icon: "✎", action: () => renameItem(item) },
+    { separator: true },
+    { label: "Delete", icon: "✕", danger: true, action: () => deleteItem(col, item, parent) },
+  ];
+}
+
 function renderCollectionNode(col, depth) {
   const wrap = h("div", { class: "tree-children", style: depth ? "" : "margin-left:0;border:none;padding-left:0" });
   const header = h(
@@ -1016,23 +1139,12 @@ function renderCollectionNode(col, depth) {
       {
         class: "tree-item",
         onclick: (e) => { if (e.target.closest("button")) return; col._open = !col._open; renderCollections(); },
+        oncontextmenu: (e) => openContextMenu(e, collectionContextMenu(col)),
       },
       dragHandlers({ kind: "collection", collectionId: col.id }, false, { self: true })
     ),
     h("span", { text: col._open === false ? "▸" : "▾" }),
-    h("b", { text: col.name }),
-    h(
-      "span",
-      { class: "row-actions" },
-      h("button", { class: "icon", title: "Run collection", text: "▶", onclick: () => openRunnerModal({ collection: col, folder: null }) }),
-      h("button", { class: "icon", title: "Docs", text: "📄", onclick: () => openDocsModal(col, col, "collection") }),
-      h("button", { class: "icon", title: "New request", text: "＋", onclick: () => addRequestTo(col, null) }),
-      h("button", { class: "icon", title: "New folder", text: "🗀", onclick: () => addFolderTo(col, null) }),
-      h("button", { class: "icon", title: "Duplicate", text: "⧉", onclick: () => duplicateCollection(col) }),
-      h("button", { class: "icon", title: "Export", text: "⇧", onclick: () => exportCollection(col) }),
-      h("button", { class: "icon", title: "Rename", text: "✎", onclick: () => renameCollection(col) }),
-      h("button", { class: "icon", title: "Delete", text: "✕", onclick: () => deleteCollection(col) })
-    )
+    h("b", { text: col.name })
   );
   wrap.appendChild(header);
   if (col._open !== false) {
@@ -1059,21 +1171,12 @@ function renderItemNode(col, item, parent) {
           {
             class: "tree-item",
             onclick: (e) => { if (e.target.closest("button")) return; item._open = !item._open; renderCollections(); },
+            oncontextmenu: (e) => openContextMenu(e, folderContextMenu(col, item, parent)),
           },
           dragHandlers({ kind: "item", collectionId: col.id, itemId: item.id }, true)
         ),
         h("span", { text: item._open === false ? "▸" : "▾" }),
-        h("span", { text: "🗀 " + item.name }),
-        h(
-          "span",
-          { class: "row-actions" },
-          h("button", { class: "icon", title: "Run folder", text: "▶", onclick: () => openRunnerModal({ collection: col, folder: item }) }),
-          h("button", { class: "icon", title: "Docs", text: "📄", onclick: () => openDocsModal(col, item, "folder") }),
-          h("button", { class: "icon", title: "New request", text: "＋", onclick: () => addRequestTo(col, item) }),
-          h("button", { class: "icon", title: "Duplicate", text: "⧉", onclick: () => duplicateItem(col, item) }),
-          h("button", { class: "icon", title: "Rename", text: "✎", onclick: () => renameItem(item) }),
-          h("button", { class: "icon", title: "Delete", text: "✕", onclick: () => deleteItem(col, item, parent) })
-        )
+        h("span", { text: "🗀 " + item.name })
       )
     );
     if (item._open !== false) (item.items || []).forEach((child) => wrap.appendChild(renderItemNode(col, child, item)));
@@ -1082,19 +1185,15 @@ function renderItemNode(col, item, parent) {
       h(
         "div",
         Object.assign(
-          { class: "tree-item", onclick: () => openSaved(col, item) },
+          {
+            class: "tree-item",
+            onclick: () => openSaved(col, item),
+            oncontextmenu: (e) => openContextMenu(e, requestContextMenu(col, item, parent)),
+          },
           dragHandlers({ kind: "item", collectionId: col.id, itemId: item.id }, false)
         ),
         methodTag(item.request.method || "GET"),
-        h("span", { text: item.name }),
-        h(
-          "span",
-          { class: "row-actions" },
-          h("button", { class: "icon", title: "Docs", text: "📄", onclick: (e) => { e.stopPropagation(); openDocsModal(col, item, "request"); } }),
-          h("button", { class: "icon", title: "Duplicate", text: "⧉", onclick: (e) => { e.stopPropagation(); duplicateItem(col, item); } }),
-          h("button", { class: "icon", title: "Rename", text: "✎", onclick: (e) => { e.stopPropagation(); renameItem(item); } }),
-          h("button", { class: "icon", title: "Delete", text: "✕", onclick: (e) => { e.stopPropagation(); deleteItem(col, item, parent); } })
-        )
+        h("span", { text: item.name })
       )
     );
   }

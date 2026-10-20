@@ -111,6 +111,18 @@ ws.onopen = async () => {
   check("request saved into collection", (await evalJs("S.collections[0].items.length")) === 1, await evalJs("JSON.stringify(S.collections[0].items.map(i=>i.name))"));
   check("tab linked to saved item", !!(await evalJs("activeTab().saved && activeTab().saved.collectionId === S.collections[0].id")));
 
+  console.log("right-click context menus");
+  const requestMenuLabels = await evalJs("(()=>{const row=[...document.querySelectorAll('#panel-collections .tree-item')].find(el=>el.textContent.includes('Hello Request')&&el.querySelector('.m'));row.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:120,clientY:160}));return [...document.querySelectorAll('.context-menu .context-item')].map(el=>el.textContent.trim()).join('|')})()");
+  check("request context menu has actions", /Docs/.test(requestMenuLabels || "") && /Duplicate/.test(requestMenuLabels || "") && /Rename/.test(requestMenuLabels || "") && /Delete/.test(requestMenuLabels || ""), requestMenuLabels);
+  check("collection tree has no inline action buttons", (await evalJs("document.querySelectorAll('#panel-collections .row-actions').length")) === 0);
+  await evalJs("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); 'ok'");
+  await sleep(200);
+  check("Escape closes context menu", (await evalJs("document.querySelectorAll('.context-menu').length")) === 0);
+  const collectionMenuLabels = await evalJs("(()=>{const row=[...document.querySelectorAll('#panel-collections .tree-item')].find(el=>el.querySelector('b')&&el.textContent.includes('My API'));row.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:120,clientY:130}));return [...document.querySelectorAll('.context-menu .context-item')].map(el=>el.textContent.trim()).join('|')})()");
+  check("collection context menu has actions", /Run collection/.test(collectionMenuLabels || "") && /New folder/.test(collectionMenuLabels || "") && /Export/.test(collectionMenuLabels || "") && /Delete/.test(collectionMenuLabels || ""), collectionMenuLabels);
+  await evalJs("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); 'ok'");
+  await sleep(200);
+
   console.log("environment + variables");
   await evalJs("void editEnvironment(null); 'ok'");
   await sleep(300);
