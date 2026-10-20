@@ -202,6 +202,16 @@ ws.onopen = async () => {
   check("v1 environment imported via UI", (await evalJs("S.environments.some(e=>e.name==='V1 Env')")) === true, await evalJs("JSON.stringify(S.environments.map(e=>e.name))"));
   check("v1 import kept query params", (await evalJs("(()=>{const c=S.collections.find(c=>c.name==='V1 In');return c.items[0].request.params[0].key==='z'})()")) === true);
 
+  console.log("open imported request");
+  const tabsBeforeImportOpen = await evalJs("S.tabs.length");
+  const clickedImported = await evalJs("(()=>{const row=[...document.querySelectorAll('#panel-collections .tree-item')].find(el=>el.textContent.includes('V1 Request')&&!el.textContent.includes('🗀'));if(!row) return 'missing';row.click();return 'clicked'})()");
+  await sleep(400);
+  check("imported request row found", clickedImported === "clicked", clickedImported);
+  check("imported request opened a tab", (await evalJs("S.tabs.length")) === tabsBeforeImportOpen + 1);
+  check("opened request has TLS defaults", (await evalJs("!!(activeTab().request.settings.tls && typeof activeTab().request.settings.tls === 'object')")) === true, await evalJs("JSON.stringify(activeTab().request.settings)"));
+  await evalJs("closeTab(S.activeTabId); 'ok'");
+  await sleep(200);
+
   console.log("TLS settings UI + mTLS send through IPC");
   const os = require("os");
   const fs = require("fs");

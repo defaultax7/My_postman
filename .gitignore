@@ -1,5 +1,12 @@
 # Postman Replicate - source only; generated/local files are ignored.
 
+# Desktop runtime directory (linked or copied Electron runtime, created by
+# tools/make-runtime.js on first launch).
+/runtime/
+
+# Remembered runtime mode (link|copy) written by tools/make-runtime.js
+/.runtime-mode
+
 # App data: collections, environments, globals, history, settings, cookies.
 # Deleting this folder resets the app.
 /data/

@@ -73,21 +73,25 @@ function blankRequest(name) {
 }
 
 function normalizeRequest(r) {
-  const base = blankRequest();
-  const out = Object.assign(base, r || {});
-  out.body = Object.assign(base.body, (r && r.body) || {});
-  out.body.raw = Object.assign(base.body.raw, (r && r.body && r.body.raw) || {});
-  out.body.graphql = Object.assign(base.body.graphql, (r && r.body && r.body.graphql) || {});
-  out.auth = Object.assign(base.auth, (r && r.auth) || {});
-  out.auth.basic = Object.assign(base.auth.basic, (r && r.auth && r.auth.basic) || {});
-  out.auth.bearer = Object.assign(base.auth.bearer, (r && r.auth && r.auth.bearer) || {});
-  out.auth.apikey = Object.assign(base.auth.apikey, (r && r.auth && r.auth.apikey) || {});
-  out.auth.oauth2 = Object.assign(base.auth.oauth2, (r && r.auth && r.auth.oauth2) || {});
-  out.scripts = Object.assign({ preRequest: "", tests: "" }, (r && r.scripts) || {});
-  out.settings = Object.assign(base.settings, (r && r.settings) || {});
-  out.settings.tls = Object.assign(base.settings.tls, (r && r.settings && r.settings.tls) || {});
+  const src = r && typeof r === "object" ? r : {};
+  const defaults = blankRequest();
+  const out = Object.assign({}, defaults, src);
+  const srcBody = src.body && typeof src.body === "object" ? src.body : {};
+  out.body = Object.assign({}, defaults.body, srcBody);
+  out.body.raw = Object.assign({}, defaults.body.raw, srcBody.raw || {});
+  out.body.graphql = Object.assign({}, defaults.body.graphql, srcBody.graphql || {});
+  out.auth = Object.assign({}, defaults.auth, src.auth || {});
+  out.auth.basic = Object.assign({}, defaults.auth.basic, (src.auth && src.auth.basic) || {});
+  out.auth.bearer = Object.assign({}, defaults.auth.bearer, (src.auth && src.auth.bearer) || {});
+  out.auth.apikey = Object.assign({}, defaults.auth.apikey, (src.auth && src.auth.apikey) || {});
+  out.auth.oauth2 = Object.assign({}, defaults.auth.oauth2, (src.auth && src.auth.oauth2) || {});
+  out.scripts = Object.assign({}, defaults.scripts, src.scripts || {});
+  const srcSettings = src.settings && typeof src.settings === "object" ? src.settings : {};
+  out.settings = Object.assign({}, defaults.settings, srcSettings);
+  out.settings.tls = Object.assign({}, defaults.settings.tls, srcSettings.tls || {});
   if (!out.description) out.description = "";
   for (const key of ["params", "headers"]) if (!Array.isArray(out[key])) out[key] = [];
+  for (const key of ["urlencoded", "formdata"]) if (!Array.isArray(out.body[key])) out.body[key] = [];
   return out;
 }
 

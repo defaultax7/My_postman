@@ -122,6 +122,7 @@ function localServer() {
   check("postman folder/request", imported.items[0].items[0].name === "Get thing");
   check("postman params", imported.items[0].items[0].request.params[0].key === "a");
   check("postman script", imported.items[0].items[0].request.scripts.preRequest.includes("pm.test"));
+  check("postman import TLS defaults", !!(imported.items[0].items[0].request.settings.tls && typeof imported.items[0].items[0].request.settings.tls === "object"));
 
   console.log("postman v1/v2.0 + workspace import");
   const v1 = {

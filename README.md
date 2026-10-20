@@ -59,6 +59,35 @@ Generated locally and ignored by git:
     data/         collections, environments, history, settings, cookies
     userdata/     Electron/Chromium profile
 
+## Why do folders in runtime/ show a shortcut arrow?
+
+`tools/make-runtime.js` links instead of copying, so the ~225 MB Electron runtime
+is not duplicated:
+
+| entry | how it is created |
+|---|---|
+| `runtime\Postman.exe`, `*.dll`, `*.pak`, ... | **hard links** (same file records, no extra disk space, no overlay) |
+| `runtime\locales` | **junction** to the Electron dist's `locales` |
+| `runtime\resources\data` | **junction** to the dist's `resources\data` |
+| `runtime\resources\app` | **junction** to this project folder, so Electron finds the app |
+
+Windows Explorer shows junctions (and symlinks) with the shortcut overlay arrow.
+
+Careful:
+- deleting a junction removes only the link, not the linked folder;
+- but deleting files *inside* `runtime\resources\app` deletes project files (it **is**
+the project), and inside `runtime\resources\data` / `runtime\locales` deletes
+Electron-dist files. Regenerate with `node tools/make-runtime.js` if needed.
+
+Want no shortcuts at all? Use a self-contained copy instead:
+
+    node tools/make-runtime.js --copy
+
+That copies the runtime files and replaces the `resources\app` junction with a tiny
+`loader.js` pointing at this project - no links anywhere, ~220 MB extra disk.
+The mode is remembered in `.runtime-mode`, so if `runtime\` is deleted the launcher
+recreates it the same way. This checkout is currently using **copy** mode.
+
 ## Requirements
 
 - Node.js 18+ for `tools/` and `test/` (the app itself has no npm dependencies).
