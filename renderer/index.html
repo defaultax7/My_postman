@@ -41,7 +41,10 @@
               <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option>
               <option>DELETE</option><option>HEAD</option><option>OPTIONS</option>
             </select>
-            <input id="url" spellcheck="false" autocomplete="off" placeholder="Enter request URL  ({{variable}} supported)">
+            <div class="url-field">
+              <div id="url-highlight" class="url-highlight" aria-hidden="true"></div>
+              <input id="url" spellcheck="false" autocomplete="off" placeholder="Enter request URL  ({{variable}} supported)" title="Ctrl+click a {{variable}} to view or edit its value">
+            </div>
             <button id="btn-send" class="primary">Send</button>
             <button id="btn-save" class="ghost">Save</button>
             <button id="btn-curl" class="ghost" title="Show cURL">cURL</button>

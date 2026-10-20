@@ -264,6 +264,224 @@ function kvTable(container, list, opts) {
 
 /* ------------------------------------------------------------- request pane */
 const REQUEST_TABS = ["params", "authorization", "headers", "body", "pre-request script", "tests", "settings"];
+const DYNAMIC_VARIABLES = new Set(["$guid", "$timestamp", "$randomInt", "$isoTimestamp"]);
+
+function currentEnvironment() {
+  return S.environments.find((e) => e.id === S.settings.activeEnvironmentId) || null;
+}
+
+function collectionForTab(t) {
+  if (!t || !t.saved) return null;
+  return S.collections.find((c) => c.id === t.saved.collectionId) || null;
+}
+
+function resolveVariableForTab(name, t) {
+  const session = t.sessionVariables || {};
+  if (Object.prototype.hasOwnProperty.call(session, name)) {
+    return { found: true, scope: "session", label: "Session", value: session[name], editable: true };
+  }
+  const env = currentEnvironment();
+  if (env) {
+    const row = (env.values || []).find((v) => v && v.key === name && v.enabled !== false);
+    if (row) return { found: true, scope: "environment", label: "Environment · " + env.name, value: row.value, editable: true, env };
+  }
+  const col = collectionForTab(t);
+  if (col) {
+    const row = (col.variables || []).find((v) => v && v.key === name);
+    if (row) return { found: true, scope: "collection", label: "Collection · " + col.name, value: row.value, editable: true, collection: col };
+  }
+  const global = (S.globals || []).find((v) => v && v.key === name);
+  if (global) return { found: true, scope: "globals", label: "Globals", value: global.value, editable: true };
+  if (DYNAMIC_VARIABLES.has(name)) return { found: true, scope: "dynamic", label: "Dynamic", value: "generated when sent", editable: false };
+  return { found: false, scope: "unset", label: "Not set", value: "", editable: true };
+}
+
+function variableTargets(t) {
+  const env = currentEnvironment();
+  const col = collectionForTab(t);
+  const out = [];
+  if (env) out.push({ value: "environment", label: "Environment · " + env.name });
+  if (col) out.push({ value: "collection", label: "Collection · " + col.name });
+  out.push({ value: "globals", label: "Globals" });
+  return out;
+}
+
+function syncUrlHighlightScroll() {
+  const input = $("#url");
+  const mirror = $("#url-highlight");
+  if (input && mirror) mirror.scrollLeft = input.scrollLeft;
+}
+
+function renderUrlHighlight() {
+  const t = activeTab();
+  const mirror = $("#url-highlight");
+  if (!t || !mirror) return;
+  const text = t.request.url || "";
+  mirror.textContent = "";
+  const re = /\{\{\s*([^{}]+?)\s*\}\}/g;
+  let last = 0;
+  let match;
+  while ((match = re.exec(text))) {
+    if (match.index > last) mirror.appendChild(document.createTextNode(text.slice(last, match.index)));
+    const info = resolveVariableForTab(match[1], t);
+    const token = h("span", { class: "url-var " + (info.found ? "set" : "unset"), text: match[0] });
+    token.dataset.var = match[1];
+    mirror.appendChild(token);
+    last = re.lastIndex;
+  }
+  if (last < text.length) mirror.appendChild(document.createTextNode(text.slice(last)));
+  syncUrlHighlightScroll();
+}
+
+function urlVariableAtPoint(event) {
+  for (const token of $$("#url-highlight .url-var")) {
+    const rect = token.getBoundingClientRect();
+    if (event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom) {
+      return { name: token.dataset.var, token };
+    }
+  }
+  return null;
+}
+
+function urlVariableAtCaret(input) {
+  const text = input.value;
+  const pos = input.selectionStart == null ? 0 : input.selectionStart;
+  const re = /\{\{\s*([^{}]+?)\s*\}\}/g;
+  let match;
+  while ((match = re.exec(text))) {
+    if (pos > match.index && pos < re.lastIndex) return { name: match[1], token: null };
+  }
+  return null;
+}
+
+let variablePopoverEl = null;
+let variablePopoverCleanup = null;
+
+function closeVariablePopover() {
+  if (variablePopoverEl) {
+    variablePopoverEl.remove();
+    variablePopoverEl = null;
+  }
+  if (variablePopoverCleanup) {
+    variablePopoverCleanup();
+    variablePopoverCleanup = null;
+  }
+}
+
+function upsertVariable(list, name, value) {
+  const row = list.find((v) => v && v.key === name);
+  if (row) {
+    row.value = value;
+    if (Object.prototype.hasOwnProperty.call(row, "enabled")) row.enabled = true;
+    return;
+  }
+  list.push({ key: name, value, enabled: true });
+}
+
+async function saveVariableValue(name, value, scope, t, info) {
+  if (scope === "session") {
+    t.sessionVariables = Object.assign({}, t.sessionVariables || {}, { [name]: value });
+  } else if (scope === "environment") {
+    const env = (info && info.env) || currentEnvironment();
+    if (!env) return false;
+    env.values = env.values || [];
+    upsertVariable(env.values, name, value);
+    await saveEnvironments();
+    renderEnvironmentsPanel();
+  } else if (scope === "collection") {
+    const col = (info && info.collection) || collectionForTab(t);
+    if (!col) return false;
+    col.variables = col.variables || [];
+    upsertVariable(col.variables, name, value);
+    await saveCollections();
+  } else if (scope === "globals") {
+    S.globals = S.globals || [];
+    upsertVariable(S.globals, name, value);
+    await saveGlobals();
+    renderEnvironmentsPanel();
+  } else {
+    return false;
+  }
+  return true;
+}
+
+function openVariablePopover(name, anchor) {
+  const t = activeTab();
+  if (!t) return;
+  closeVariablePopover();
+  closeContextMenu();
+  const info = resolveVariableForTab(name, t);
+  const valueText = info.found && info.editable && info.value != null ? String(info.value) : "";
+  const valueInput = h("input", { type: "text", value: valueText, placeholder: "Value", spellcheck: "false" });
+  const targets = variableTargets(t);
+  const scopeSelect = !info.found
+    ? h("select", {}, ...targets.map((target) => h("option", { value: target.value }, target.label)))
+    : null;
+  const source = info.found
+    ? h("div", { class: "var-popover-source" }, h("span", { class: "var-dot set" }), h("span", { text: "Source: " + info.label }))
+    : h("div", { class: "var-popover-source" }, h("span", { class: "var-dot" }), h("span", { text: "Not set — choose where to save it" }));
+  const saveBtn = h("button", { class: "primary", text: "Save" });
+  const cancelBtn = h("button", { class: "ghost", text: "Cancel", onclick: () => closeVariablePopover() });
+  const popover = h(
+    "div",
+    { class: "var-popover", role: "dialog", "aria-label": "Variable " + name },
+    h(
+      "div",
+      { class: "var-popover-head" },
+      h("code", { text: "{{" + name + "}}" }),
+      h("button", { class: "icon", title: "Close", text: "✕", onclick: () => closeVariablePopover() })
+    ),
+    source,
+    scopeSelect ? h("div", { class: "var-scope-row" }, h("label", { text: "Save to" }), scopeSelect) : null,
+    info.editable
+      ? h("div", { class: "var-popover-row" }, valueInput, saveBtn, cancelBtn)
+      : h("div", { class: "hint", text: "This value is generated when the request is sent." })
+  );
+  document.body.appendChild(popover);
+
+  const anchorRect = anchor && anchor.isConnected ? anchor.getBoundingClientRect() : ($("#url") || popover).getBoundingClientRect();
+  const rect = popover.getBoundingClientRect();
+  const left = Math.max(6, Math.min(anchorRect.left, window.innerWidth - rect.width - 6));
+  let top = anchorRect.bottom + 6;
+  if (top + rect.height + 6 > window.innerHeight) top = Math.max(6, anchorRect.top - rect.height - 6);
+  popover.style.left = left + "px";
+  popover.style.top = top + "px";
+  variablePopoverEl = popover;
+
+  const save = async () => {
+    if (!info.editable) return;
+    const scope = info.found ? info.scope : scopeSelect.value;
+    const ok = await saveVariableValue(name, valueInput.value, scope, t, info);
+    if (!ok) return toast("Could not save variable", "error");
+    closeVariablePopover();
+    renderUrlHighlight();
+    toast("Variable “" + name + "” saved", "ok");
+  };
+  saveBtn.onclick = save;
+  valueInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); save(); }
+  });
+
+  const onPointerDown = (e) => { if (!popover.contains(e.target)) closeVariablePopover(); };
+  const onKeyDown = (e) => { if (e.key === "Escape") { e.preventDefault(); closeVariablePopover(); } };
+  const dismiss = () => closeVariablePopover();
+  document.addEventListener("mousedown", onPointerDown, true);
+  document.addEventListener("keydown", onKeyDown, true);
+  window.addEventListener("blur", dismiss);
+  window.addEventListener("resize", dismiss);
+  window.addEventListener("scroll", dismiss, true);
+  variablePopoverCleanup = () => {
+    document.removeEventListener("mousedown", onPointerDown, true);
+    document.removeEventListener("keydown", onKeyDown, true);
+    window.removeEventListener("blur", dismiss);
+    window.removeEventListener("resize", dismiss);
+    window.removeEventListener("scroll", dismiss, true);
+  };
+  if (info.editable) {
+    valueInput.focus();
+    valueInput.select();
+  }
+}
 
 function renderRequestTabs() {
   const t = activeTab();
@@ -294,6 +512,7 @@ function renderRequestPane() {
   $("#method").value = t.request.method;
   $("#method").dataset.method = t.request.method;
   $("#url").value = t.request.url;
+  renderUrlHighlight();
   renderRequestTabs();
   const body = $("#request-body");
   body.textContent = "";
@@ -332,7 +551,10 @@ function syncParamsToUrl(t) {
       enabled.forEach((p) => usp.append(p.key, p.value));
       t.request.url = base + "?" + usp.toString();
     }
-    if (S.activeTabId === t.id) $("#url").value = t.request.url;
+    if (S.activeTabId === t.id) {
+      $("#url").value = t.request.url;
+      renderUrlHighlight();
+    }
     markDirty(t);
   } catch (_) {}
 }
@@ -1027,6 +1249,7 @@ function openContextMenu(event, entries) {
   event.preventDefault();
   event.stopPropagation();
   closeContextMenu();
+  closeVariablePopover();
 
   const menu = h("div", { class: "context-menu", role: "menu" });
   for (const entry of entries) {
@@ -1519,6 +1742,7 @@ async function editEnvironment(env) {
           close();
           renderEnvironmentsPanel();
           renderEnvSelect();
+          renderUrlHighlight();
           toast("Environment saved", "ok");
         },
       },
@@ -1535,7 +1759,7 @@ async function editGlobals() {
     body: kvWrap,
     actions: [
       { label: "Cancel", ghost: true, onClick: (close) => close() },
-      { label: "Save", primary: true, onClick: async (close) => { S.globals = values; await saveGlobals(); close(); renderEnvironmentsPanel(); toast("Globals saved", "ok"); } },
+      { label: "Save", primary: true, onClick: async (close) => { S.globals = values; await saveGlobals(); close(); renderEnvironmentsPanel(); renderUrlHighlight(); toast("Globals saved", "ok"); } },
     ],
   });
 }
@@ -2170,10 +2394,21 @@ function wireStaticEvents() {
   $("#btn-import").onclick = openImportModal;
   $("#btn-theme").onclick = () => { S.settings.theme = S.settings.theme === "light" ? "dark" : "light"; applyTheme(); saveSettings(); };
   $("#btn-manage-env").onclick = () => { S.activePanel = "environments"; renderSidebar(); };
-  $("#env-select").onchange = (e) => { S.settings.activeEnvironmentId = e.target.value || null; saveSettings(); toast("Environment: " + (e.target.selectedOptions[0] || {}).text, "ok"); };
+  $("#env-select").onchange = (e) => { S.settings.activeEnvironmentId = e.target.value || null; saveSettings(); renderUrlHighlight(); toast("Environment: " + (e.target.selectedOptions[0] || {}).text, "ok"); };
   $("#method").onchange = (e) => { const t = activeTab(); if (t) { t.request.method = e.target.value; e.target.dataset.method = e.target.value; markDirty(t); } };
-  $("#url").oninput = (e) => { const t = activeTab(); if (t) { t.request.url = e.target.value; t.request.params = (t.request.params || []).length ? t.request.params : []; markDirty(t); } };
-  $("#url").addEventListener("change", () => { const t = activeTab(); if (t) syncParamsFromUrl(t); });
+  const urlInput = $("#url");
+  urlInput.oninput = (e) => { const t = activeTab(); if (t) { t.request.url = e.target.value; t.request.params = (t.request.params || []).length ? t.request.params : []; renderUrlHighlight(); markDirty(t); } };
+  urlInput.addEventListener("change", () => { const t = activeTab(); if (t) syncParamsFromUrl(t); });
+  urlInput.addEventListener("scroll", syncUrlHighlightScroll);
+  urlInput.addEventListener("keyup", syncUrlHighlightScroll);
+  urlInput.addEventListener("click", (e) => {
+    syncUrlHighlightScroll();
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const found = urlVariableAtPoint(e) || urlVariableAtCaret(urlInput);
+    if (!found) return;
+    e.preventDefault();
+    openVariablePopover(found.name, found.token);
+  });
   $$(".sidebar-tabs button").forEach((btn) => {
     btn.onclick = () => { S.activePanel = btn.dataset.panel; renderSidebar(); };
   });

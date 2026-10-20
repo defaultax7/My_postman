@@ -123,6 +123,24 @@ ws.onopen = async () => {
   await evalJs("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); 'ok'");
   await sleep(200);
 
+  console.log("URL variable highlighting + ctrl+click");
+  await evalJs("newTab(); 'ok'");
+  await sleep(300);
+  const variableTabId = await evalJs("S.activeTabId");
+  await evalJs("(()=>{const t=activeTab();t.sessionVariables={host:'example.com'};t.request.url='{{host}}/{{missing}}';document.querySelector('#url').value=t.request.url;renderUrlHighlight();return 'ok'})()");
+  const urlTokens = await evalJs("JSON.stringify([...document.querySelectorAll('#url-highlight .url-var')].map(el=>({name:el.dataset.var,cls:el.className,color:getComputedStyle(el).color})))");
+  check("resolved URL variable is green", /"name":"host","cls":"url-var set"/.test(urlTokens || ""), urlTokens);
+  check("unresolved URL variable is red", /"name":"missing","cls":"url-var unset"/.test(urlTokens || ""), urlTokens);
+  const variableEditor = await evalJs("(()=>{const token=[...document.querySelectorAll('#url-highlight .url-var')].find(el=>el.dataset.var==='host');const rect=token.getBoundingClientRect();document.querySelector('#url').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,ctrlKey:true,clientX:rect.left+3,clientY:rect.top+3}));const pop=document.querySelector('.var-popover');return JSON.stringify({open:!!pop,value:pop?pop.querySelector('input').value:null,text:pop?pop.innerText:''})})()");
+  check("Ctrl+click opens variable editor", /"open":true/.test(variableEditor || "") && /"value":"example\.com"/.test(variableEditor || ""), variableEditor);
+  check("variable editor shows its source", /Source: Session/.test(variableEditor || ""), variableEditor);
+  await evalJs("(()=>{const pop=document.querySelector('.var-popover');pop.querySelector('input').value='example.org';pop.querySelector('button.primary').click();return 'ok'})()");
+  await sleep(300);
+  check("variable editor saved a new value", (await evalJs("activeTab().sessionVariables.host")) === "example.org");
+  check("edited variable stays resolved", (await evalJs("document.querySelector('#url-highlight .url-var').className")) === "url-var set");
+  await evalJs(`closeTab(${JSON.stringify(variableTabId)}); 'ok'`);
+  await sleep(300);
+
   console.log("environment + variables");
   await evalJs("void editEnvironment(null); 'ok'");
   await sleep(300);
