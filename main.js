@@ -7,13 +7,18 @@ const engine = require("./lib/engine");
 const { runScript } = require("./lib/script");
 const io = require("./lib/io");
 
-const DATA_DIR = path.join(__dirname, "data");
+const PACKAGED_LAYOUT = path.basename(path.dirname(__dirname)) === "resources";
+const APP_ROOT = PACKAGED_LAYOUT
+  ? path.resolve(process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath))
+  : __dirname;
+const DATA_DIR = path.join(APP_ROOT, "data");
+const PROFILE_DIR = path.join(APP_ROOT, "userdata");
 const store = new Store(DATA_DIR);
 let jar = null;
 let mainWindow = null;
 
-fs.mkdirSync(path.join(__dirname, "userdata"), { recursive: true });
-app.setPath("userData", path.join(__dirname, "userdata"));
+fs.mkdirSync(PROFILE_DIR, { recursive: true });
+app.setPath("userData", PROFILE_DIR);
 app.setName("Postman Replicate");
 
 function getJar() {

@@ -4,5 +4,8 @@
   "version": "0.1.0",
   "description": "Offline desktop API client - new implementation",
   "main": "main.js",
-  "private": true
+  "private": true,
+  "scripts": {
+    "package:win": "node tools/package-win.js"
+  }
 }

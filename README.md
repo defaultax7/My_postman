@@ -11,6 +11,31 @@ to the runtime already on this machine; Postman's `app.asar` is never linked or
 loaded). All state lives in `replicate\data\`; deleting that folder resets the
 app.
 
+## Share as a Windows app
+
+Build a portable folder and a zip using the local Electron runtime (no npm
+packages or downloads):
+
+    node tools/package-win.js
+
+Or double-click `Pack-Windows.cmd` in this folder
+(`..\Pack-Postman-Replicate.cmd` also works and forwards arguments).
+
+Outputs:
+
+    dist\Postman-Replicate-0.1.0-win64\
+    dist\Postman-Replicate-0.1.0-win64.zip
+
+Send the zip. The recipient extracts it and runs `Postman Replicate.exe`.
+Collections, environments, history and settings are stored in the `data`
+folder created next to the exe; `userdata` holds the Chromium profile. Delete
+both to reset the app.
+
+Use `--no-zip` to build only the folder. Use `--src <electron-dist-dir>` to
+package from another Electron distribution instead of `runtime\`. This is a
+portable folder build (one exe plus Electron DLLs/resources), not a single-file
+installer; an installer/one-file exe needs a tool such as electron-builder.
+
 ## Features
 
 - Request builder: method, URL, query params, headers, body (raw JSON/XML/text/JS,
@@ -47,10 +72,11 @@ Tracked source (everything needed for the project):
 
     .gitignore
     package.json  main.js  preload.js
+    Pack-Windows.cmd
     lib/          engine.js  script.js  io.js  store.js
     renderer/     index.html  styles.css  app.js
     test/         smoke.js  drive.js
-    tools/        make-runtime.js
+    tools/        make-runtime.js  package-win.js
     README.md     MISSING-FEATURES.html
 
 Generated locally and ignored by git:

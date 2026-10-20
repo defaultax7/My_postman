@@ -23,6 +23,9 @@ Crashpad/
 # Dependencies (the app itself has none; kept for safety)
 /node_modules/
 
+# Generated Windows packages
+/dist/
+
 # OS / editor junk
 .DS_Store
 Thumbs.db
