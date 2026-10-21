@@ -101,7 +101,7 @@ const S = {
   environments: [],
   globals: [],
   history: [],
-  settings: { theme: "dark", activeEnvironmentId: null, requestPaneHeight: null },
+  settings: { theme: "dark", activeEnvironmentId: null, requestPaneHeight: null, bypassTls: false },
   tabs: [],
   activeTabId: null,
   activePanel: "collections",
@@ -785,6 +785,14 @@ function renderSettings(root, t) {
   check("Send cookies from jar", "sendCookies");
   check("Verify TLS certificate", "verifyTls");
   root.appendChild(
+    h("div", {
+      class: "hint",
+      text: S.settings.bypassTls
+        ? "SSL verification is disabled globally in Settings; this per-request option is currently ignored."
+        : "Uncheck “Verify TLS certificate” to bypass self-signed certificate errors for this request. To disable verification for all requests, open Settings (⚙).",
+    })
+  );
+  root.appendChild(
     h(
       "div",
       { class: "field-row" },
@@ -877,6 +885,67 @@ function renderTlsSettings(root, t) {
   root.appendChild(h("div", { class: "hint", text: "Files are read by the main process when the request is sent. PEM = certificate + private key; PKCS#12 = .p12/.pfx bundle." }));
 }
 
+/* -------------------------------------------------------------- app settings */
+function refreshSettingsButton() {
+  const btn = $("#btn-settings");
+  if (!btn) return;
+  btn.classList.toggle("ssl-bypass-on", S.settings.bypassTls === true);
+  btn.title = S.settings.bypassTls ? "Settings — SSL verification bypass is ON" : "Settings";
+}
+
+function openAppSettings() {
+  const bypass = h("input", { type: "checkbox", checked: S.settings.bypassTls === true });
+  const body = h(
+    "div",
+    {},
+    h(
+      "label",
+      { class: "settings-option" },
+      bypass,
+      h(
+        "span",
+        {},
+        h("b", { text: "Bypass SSL certificate verification" }),
+        h("div", {
+          class: "hint",
+          text: "Allows requests to servers with self-signed, expired, or otherwise untrusted certificates. This applies to every request, including collection runs. Use only with servers you trust.",
+        })
+      )
+    ),
+    h("div", { class: "banner warn", text: "Disabling certificate verification removes protection against man-in-the-middle attacks." })
+  );
+  openModal({
+    title: "Settings",
+    body,
+    actions: [
+      { label: "Cancel", ghost: true, onClick: (close) => close() },
+      {
+        label: "Save",
+        primary: true,
+        onClick: (close) => {
+          S.settings.bypassTls = bypass.checked;
+          saveSettings();
+          close();
+          refreshSettingsButton();
+          renderRequestPane();
+          toast(bypass.checked ? "SSL verification bypass enabled — send the request again" : "SSL verification enabled", bypass.checked ? "warn" : "ok");
+        },
+      },
+    ],
+  });
+}
+
+function isCertificateError(code) {
+  const value = String(code || "");
+  return (
+    value === "SELF_SIGNED_CERT_IN_CHAIN" ||
+    value === "DEPTH_ZERO_SELF_SIGNED_CERT" ||
+    value === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" ||
+    value.startsWith("CERT_") ||
+    value.startsWith("UNABLE_TO_GET_ISSUER_CERT")
+  );
+}
+
 /* ------------------------------------------------------------ response pane */
 const RESPONSE_TABS = [["body", "Body"], ["headers", "Headers"], ["cookies", "Cookies"], ["tests", "Test Results"], ["console", "Console"]];
 
@@ -931,6 +1000,16 @@ function renderResponse() {
   bodyEl.textContent = "";
   if (!r.ok) {
     bodyEl.appendChild(h("div", { class: "banner err", text: (r.error && (r.error.code ? r.error.code + ": " : "") + r.error.message) || "Request failed" }));
+    if (r.error && isCertificateError(r.error.code)) {
+      bodyEl.appendChild(
+        h(
+          "div",
+          { class: "banner warn" },
+          h("div", { text: "Certificate verification failed. For a trusted development server, you can disable SSL verification for all requests." }),
+          h("button", { class: "ghost", style: "margin-top:6px", text: "Open SSL settings", onclick: () => openAppSettings() })
+        )
+      );
+    }
     if (r.timings) bodyEl.appendChild(h("div", { class: "hint", text: "Time: " + fmtTime(r.timings.total) }));
   } else if (active === "body") {
     renderResponseBody(bodyEl, t, r);
@@ -2392,6 +2471,7 @@ function wireStaticEvents() {
   $("#btn-save").onclick = showSaveModal;
   $("#btn-curl").onclick = openCurlModal;
   $("#btn-import").onclick = openImportModal;
+  $("#btn-settings").onclick = openAppSettings;
   $("#btn-theme").onclick = () => { S.settings.theme = S.settings.theme === "light" ? "dark" : "light"; applyTheme(); saveSettings(); };
   $("#btn-manage-env").onclick = () => { S.activePanel = "environments"; renderSidebar(); };
   $("#env-select").onchange = (e) => { S.settings.activeEnvironmentId = e.target.value || null; saveSettings(); renderUrlHighlight(); toast("Environment: " + (e.target.selectedOptions[0] || {}).text, "ok"); };
@@ -2520,6 +2600,7 @@ async function boot() {
   wireShortcuts();
   api.onMenu(handleMenu);
   renderEnvSelect();
+  refreshSettingsButton();
   renderAll();
   if (S.settings.requestPaneHeight) {
     $("#request-pane").style.height = S.settings.requestPaneHeight + "px";

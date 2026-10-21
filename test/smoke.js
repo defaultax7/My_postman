@@ -212,6 +212,24 @@ function localServer() {
       { scopes: [] }
     );
     check("missing cert file reports TLS_MATERIAL", !badPath.ok && badPath.error.code === "TLS_MATERIAL", badPath.error);
+
+    const untrustedServer = https.createServer(
+      { key: fs.readFileSync(`${dir}/server.key`), cert: fs.readFileSync(`${dir}/server.crt`) },
+      (req, res) => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify({ ok: true, bypassed: true })); }
+    );
+    await new Promise((r) => untrustedServer.listen(0, "127.0.0.1", r));
+    const untrustedUrl = `https://localhost:${untrustedServer.address().port}/hello`;
+    const strictTls = await engine.execute(
+      { method: "GET", url: untrustedUrl, headers: [], params: [], body: { mode: "none" }, settings: { verifyTls: true } },
+      { scopes: [] }
+    );
+    check("untrusted certificate rejected by default", !strictTls.ok && /SELF_SIGNED|UNABLE_TO_VERIFY|DEPTH_ZERO/.test(strictTls.error.code || ""), strictTls.error);
+    const bypassTls = await engine.execute(
+      { method: "GET", url: untrustedUrl, headers: [], params: [], body: { mode: "none" }, settings: { verifyTls: false } },
+      { scopes: [] }
+    );
+    check("verifyTls:false bypasses untrusted certificate", bypassTls.ok && bypassTls.status === 200, bypassTls.ok ? bypassTls.body.text : bypassTls.error);
+    untrustedServer.close();
     tlsServer.close();
     tlsOk = true;
   } catch (e) {

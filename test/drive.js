@@ -251,6 +251,18 @@ ws.onopen = async () => {
   await evalJs("closeTab(S.activeTabId); 'ok'");
   await sleep(200);
 
+  console.log("global SSL bypass setting");
+  await evalJs("openAppSettings(); 'ok'");
+  await sleep(300);
+  const settingsModal = await evalJs("(()=>{const m=document.querySelector('#modal-root');return JSON.stringify({open:m.classList.contains('open'),checkbox:!!m.querySelector('.settings-option input[type=checkbox]'),text:m.innerText})})()");
+  check("settings dialog has SSL bypass option", /"open":true/.test(settingsModal || "") && /"checkbox":true/.test(settingsModal || "") && /Bypass SSL certificate verification/.test(settingsModal || ""), settingsModal);
+  await evalJs("(()=>{const c=document.querySelector('#modal-root .settings-option input');c.checked=true;[...document.querySelectorAll('#modal-root button')].find(b=>b.textContent.trim()==='Save').click();return 'ok'})()");
+  await sleep(400);
+  check("global SSL bypass saved", (await evalJs("S.settings.bypassTls")) === true);
+  check("settings button marks active bypass", (await evalJs("document.querySelector('#btn-settings').classList.contains('ssl-bypass-on')")) === true);
+  await evalJs("S.settings.bypassTls=false;saveSettings();refreshSettingsButton();'ok'");
+  await sleep(200);
+
   console.log("TLS settings UI + mTLS send through IPC");
   const os = require("os");
   const fs = require("fs");

@@ -53,6 +53,7 @@ async function handleSend(payload) {
   if (!request) return { ok: false, error: { message: "No request supplied" } };
   const globals = store.load("globals", []);
   const env = activeEnvironment();
+  const appSettings = store.load("settings", {});
   const collectionVariables = payload.collectionVariables || [];
   const session = payload.sessionVariables || {};
 
@@ -90,7 +91,7 @@ async function handleSend(payload) {
   const response = await engine.execute(requestForSend, {
     scopes,
     jar: getJar(),
-    settings: request.settings,
+    settings: appSettings.bypassTls === true ? { verifyTls: false } : undefined,
   });
 
   if (response.ok && request.scripts && request.scripts.tests) {

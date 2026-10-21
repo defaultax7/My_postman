@@ -43,6 +43,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 #topbar .brand { font-weight: 700; letter-spacing: .2px; display: flex; align-items: center; gap: 8px; }
 #topbar .logo { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); display: inline-block; }
 .topbar-actions { display: flex; gap: 8px; align-items: center; -webkit-app-region: no-drag; }
+#btn-settings.ssl-bypass-on { color: var(--yellow); }
 #env-select { min-width: 160px; }
 
 #layout { display: flex; height: calc(100% - 44px); }
@@ -144,6 +145,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 .field-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .field-row label { width: 130px; color: var(--fg-dim); }
 .field-row input, .field-row select { flex: 1; }
+.settings-option { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.settings-option input[type=checkbox] { flex: 0 0 auto; width: 16px; height: 16px; margin: 2px 0 0; }
+.settings-option b { display: block; margin-bottom: 2px; }
+.settings-option .hint { display: block; }
 .hint { color: var(--fg-faint); font-size: 12px; }
 
 textarea.code { width: 100%; min-height: 220px; font-family: var(--mono); font-size: 12px; white-space: pre; resize: vertical; }
@@ -193,6 +198,7 @@ iframe.preview { width: 100%; height: 100%; min-height: 320px; border: 1px solid
 .toast { background: var(--bg-4); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 8px 12px; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.4); max-width: 380px; }
 .toast.error { border-left-color: var(--red); }
 .toast.ok { border-left-color: var(--green); }
+.toast.warn { border-left-color: var(--yellow); }
 
 .banner { padding: 6px 10px; border-radius: 4px; margin-bottom: 8px; font-size: 12px; }
 .banner.warn { background: rgba(230,200,74,.12); color: var(--yellow); border: 1px solid rgba(230,200,74,.3); }

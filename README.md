@@ -47,12 +47,12 @@ installer; an installer/one-file exe needs a tool such as electron-builder.
 - **Collection Runner**: run a collection or folder with iterations, delay, order (as defined/random) and stop-on-failure, live progress + results table, JSON/HTML report export.
 - Environments + globals with `{{variable}}` resolution, active-environment
   selector, script read/write.
-- **TLS**: custom CA and client certificates (PEM cert+key or PKCS#12 with passphrase) per request, plus the verify-certificate toggle.
+- **TLS**: custom CA and client certificates (PEM cert+key or PKCS#12 with passphrase) per request, **per-request and global SSL verification bypass** for self-signed certificates, plus the verify-certificate toggle.
 - History: every send stores **request and response** (status, time, size, headers, cookies, body up to 256 KB, test results, console); grouped by day, entries reopen the full request with the stored response restored, individually deletable.
 - Pre-request + Tests scripts: sandboxed JS (`node:vm`, 5s limit) with a
   `pm.*` shim (`pm.environment`, `pm.globals`, `pm.variables`,
   `pm.collectionVariables`, `pm.request`, `pm.response`, `pm.test`, `pm.expect`).
-- Cookie jar, redirect following, TLS verification toggle, timeout per request.
+- Cookie jar, redirect following, TLS verification toggle (per request and global), timeout per request.
 ## Architecture
 
     main.js            Electron main: window, native menu, IPC, storage
