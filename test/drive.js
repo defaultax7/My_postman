@@ -111,6 +111,34 @@ ws.onopen = async () => {
   check("request saved into collection", (await evalJs("S.collections[0].items.length")) === 1, await evalJs("JSON.stringify(S.collections[0].items.map(i=>i.name))"));
   check("tab linked to saved item", !!(await evalJs("activeTab().saved && activeTab().saved.collectionId === S.collections[0].id")));
 
+  console.log("saved request tab reuse");
+  const tabsBeforeReuse = await evalJs("S.tabs.length");
+  const clickSavedRequest = "(()=>{const row=[...document.querySelectorAll('#panel-collections .tree-item')].find(el=>el.textContent.includes('Hello Request')&&el.querySelector('.m'));row.click();return 'ok'})()";
+  await evalJs(clickSavedRequest);
+  await sleep(300);
+  const tabsAfterFirstOpen = await evalJs("S.tabs.length");
+  await evalJs(clickSavedRequest);
+  await sleep(300);
+  const tabsAfterSecondOpen = await evalJs("S.tabs.length");
+  check("saved request reuses its existing tab", tabsAfterFirstOpen === tabsBeforeReuse && tabsAfterSecondOpen === tabsBeforeReuse, JSON.stringify({ before: tabsBeforeReuse, first: tabsAfterFirstOpen, second: tabsAfterSecondOpen }));
+
+  console.log("quick save into linked request");
+  await evalJs("(()=>{const t=activeTab();t.request.headers.push({key:'X-Quick-Save',value:'1',enabled:true});markDirty(t);return 'ok'})()");
+  await evalJs("document.querySelector('#btn-save').click(); 'ok'");
+  await sleep(500);
+  check("quick save does not open the dialog", (await evalJs("document.querySelector('#modal-root').classList.contains('open')")) === false);
+  check("quick save updates the linked collection request", (await evalJs("S.collections[0].items[0].request.headers.some(h=>h.key==='X-Quick-Save'&&h.value==='1')")) === true);
+  check("quick save clears the dirty state", (await evalJs("activeTab().dirty")) === false);
+  await evalJs("newTab(); 'ok'");
+  await sleep(300);
+  await evalJs("document.querySelector('#btn-save').click(); 'ok'");
+  await sleep(300);
+  check("save for an unsaved tab still asks for a destination", (await evalJs("document.querySelector('#modal-root').classList.contains('open')")) === true);
+  await evalJs("(()=>{const b=[...document.querySelectorAll('#modal-root button')].find(x=>x.textContent.trim()==='Cancel');if(b)b.click();return 'ok'})()");
+  await sleep(200);
+  await evalJs("closeTab(S.activeTabId); 'ok'");
+  await sleep(300);
+
   console.log("right-click context menus");
   const requestMenuLabels = await evalJs("(()=>{const row=[...document.querySelectorAll('#panel-collections .tree-item')].find(el=>el.textContent.includes('Hello Request')&&el.querySelector('.m'));row.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:120,clientY:160}));return [...document.querySelectorAll('.context-menu .context-item')].map(el=>el.textContent.trim()).join('|')})()");
   check("request context menu has actions", /Docs/.test(requestMenuLabels || "") && /Duplicate/.test(requestMenuLabels || "") && /Rename/.test(requestMenuLabels || "") && /Delete/.test(requestMenuLabels || ""), requestMenuLabels);

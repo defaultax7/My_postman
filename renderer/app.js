@@ -1611,6 +1611,22 @@ async function exportCollection(col) {
 }
 
 function openSaved(collection, item) {
+  const existing = S.tabs.find((tab) => tab.saved && tab.saved.itemId === item.id);
+  if (existing) {
+    existing.saved = { collectionId: collection.id, itemId: item.id };
+    if (!existing.dirty) {
+      existing.name = item.name;
+      existing.request = normalizeRequest(clone(item.request));
+    }
+    if (S.activeTabId === existing.id) {
+      renderTabs();
+      scheduleSessionSave();
+      return;
+    }
+    S.activeTabId = existing.id;
+    renderAll();
+    return;
+  }
   newTab(clone(item.request), { name: item.name, saved: { collectionId: collection.id, itemId: item.id } });
 }
 
@@ -2306,6 +2322,35 @@ async function importCurlFromClipboard() {
 }
 
 /* ------------------------------------------------------------------- save */
+function findSavedTarget(t) {
+  if (!t || !t.saved || !t.saved.itemId) return null;
+  for (const collection of S.collections) {
+    const entry = findItemEntry(collection, t.saved.itemId);
+    if (entry) return { collection, item: entry.item };
+  }
+  return null;
+}
+
+async function saveActiveRequest() {
+  if ($("#modal-root").classList.contains("open")) return;
+  const t = activeTab();
+  if (!t) return;
+  const target = findSavedTarget(t);
+  if (!target) {
+    showSaveModal();
+    return;
+  }
+  t.request.name = target.item.name;
+  target.item.request = clone(t.request);
+  t.name = target.item.name;
+  t.saved = { collectionId: target.collection.id, itemId: target.item.id };
+  t.dirty = false;
+  await saveCollections();
+  renderTabs();
+  scheduleSessionSave();
+  toast("Request saved", "ok");
+}
+
 function showSaveModal() {
   const t = activeTab();
   if (!t) return;
@@ -2460,7 +2505,7 @@ function wireShortcuts() {
     const mod = e.ctrlKey || e.metaKey;
     if (!mod) return;
     if (e.key === "Enter") { e.preventDefault(); sendActive(); }
-    else if (e.key.toLowerCase() === "s") { e.preventDefault(); showSaveModal(); }
+    else if (e.key.toLowerCase() === "s") { e.preventDefault(); saveActiveRequest(); }
     else if (e.key.toLowerCase() === "t") { e.preventDefault(); newTab(); }
     else if (e.key.toLowerCase() === "w") { e.preventDefault(); if (S.activeTabId) closeTab(S.activeTabId); }
   });
@@ -2468,7 +2513,7 @@ function wireShortcuts() {
 
 function wireStaticEvents() {
   $("#btn-send").onclick = sendActive;
-  $("#btn-save").onclick = showSaveModal;
+  $("#btn-save").onclick = saveActiveRequest;
   $("#btn-curl").onclick = openCurlModal;
   $("#btn-import").onclick = openImportModal;
   $("#btn-settings").onclick = openAppSettings;
@@ -2537,7 +2582,7 @@ function handleMenu(message) {
   const channel = message.channel;
   if (channel === "new-request" || channel === "new-tab") newTab();
   else if (channel === "close-tab") { if (S.activeTabId) closeTab(S.activeTabId); }
-  else if (channel === "save-request") showSaveModal();
+  else if (channel === "save-request") saveActiveRequest();
   else if (channel === "import-curl") importCurlFromClipboard();
   else if (channel === "import-postman") openImportModal();
   else if (channel === "export-curl") openCurlModal();

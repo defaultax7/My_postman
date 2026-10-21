@@ -3,7 +3,7 @@
 
    Usage:
      node tools/package-win.js
-     node tools/package-win.js --src "C:\\path\\to\\electron-dist" [--no-zip]
+     node tools/package-win.js --src "C:\\path\\to\\electron-dist" [--out dist-dir] [--no-zip]
 
    The result is written to dist\\Postman-Replicate-<version>-win64\\. The app code is
    copied into resources\\app; user data is not included and is created next to the exe
@@ -17,7 +17,17 @@ const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "
 const argv = process.argv.slice(2);
 const flags = argv.filter((arg) => arg.startsWith("--"));
 const srcIndex = argv.indexOf("--src");
+const outIndex = argv.indexOf("--out");
 const requestedSource = srcIndex >= 0 ? argv[srcIndex + 1] : process.env.ELECTRON_DIST;
+const requestedOut = outIndex >= 0 ? argv[outIndex + 1] : null;
+if (srcIndex >= 0 && !requestedSource) {
+  console.error("[package] --src requires an Electron distribution path.");
+  process.exit(1);
+}
+if (outIndex >= 0 && !requestedOut) {
+  console.error("[package] --out requires an output directory.");
+  process.exit(1);
+}
 const noZip = flags.includes("--no-zip");
 
 function fail(message) {
@@ -42,7 +52,7 @@ if (!source) {
 }
 
 const folderName = `Postman-Replicate-${pkg.version}-win64`;
-const outRoot = path.join(projectRoot, "dist");
+const outRoot = requestedOut ? path.resolve(projectRoot, requestedOut) : path.join(projectRoot, "dist");
 const outDir = path.join(outRoot, folderName);
 const zipPath = path.join(outRoot, folderName + ".zip");
 
