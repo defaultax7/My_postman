@@ -17,6 +17,18 @@ function localServer() {
       let body = "";
       req.on("data", (c) => (body += c));
       req.on("end", () => {
+        if (req.url.startsWith("/cookie-set")) {
+          res.writeHead(200, { "Set-Cookie": ["sid=abc; Path=/; HttpOnly", "theme=dark; Path=/"], "Content-Type": "application/json" });
+          return res.end(JSON.stringify({ ok: true }));
+        }
+        if (req.url.startsWith("/cookie-echo")) {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          return res.end(JSON.stringify({ cookie: req.headers.cookie || null }));
+        }
+        if (req.url.startsWith("/cookie-redirect")) {
+          res.writeHead(302, { Location: "/cookie-echo", "Set-Cookie": ["redir=yes; Path=/"] });
+          return res.end();
+        }
         if (req.url.startsWith("/redirect")) {
           res.writeHead(302, { Location: "/hello" });
           return res.end();
@@ -83,6 +95,24 @@ function localServer() {
   const jar = new engine.CookieJar([]);
   jar.addFromResponse(["sid=42; Path=/; HttpOnly"], base + "/");
   check("cookie jar match", jar.headerFor(base + "/x") === "sid=42", jar.headerFor(base + "/x"));
+
+  const liveJar = new engine.CookieJar([]);
+  const setCookie = await engine.execute(
+    { method: "GET", url: base + "/cookie-set", headers: [], params: [], body: { mode: "none" } },
+    { scopes: [], jar: liveJar }
+  );
+  check("cookie stored from response", setCookie.ok && liveJar.list().length === 2 && liveJar.list().some((c) => c.name === "sid" && c.httpOnly), liveJar.list());
+  const echoCookie = await engine.execute(
+    { method: "GET", url: base + "/cookie-echo", headers: [], params: [], body: { mode: "none" } },
+    { scopes: [], jar: liveJar }
+  );
+  check("stored cookie sent to next request", echoCookie.ok && /sid=abc/.test(JSON.parse(echoCookie.body.text).cookie || ""), echoCookie.ok ? echoCookie.body.text : echoCookie.error);
+  const redirectCookie = await engine.execute(
+    { method: "GET", url: base + "/cookie-redirect", headers: [], params: [], body: { mode: "none" } },
+    { scopes: [], jar: liveJar }
+  );
+  const redirectedCookie = redirectCookie.ok ? JSON.parse(redirectCookie.body.text).cookie || "" : "";
+  check("cookie set on redirect sent on next hop", redirectCookie.ok && /sid=abc/.test(redirectedCookie) && /redir=yes/.test(redirectedCookie), redirectCookie.ok ? redirectCookie.body.text : redirectCookie.error);
 
   console.log("script runner");
   const pre = runScript("pm.environment.set('token', 'from-script'); pm.variables.set('v', 1);", "prerequest", { environment: {}, globals: {}, request: { method: "GET", url: base, headers: [] } });

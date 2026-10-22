@@ -101,6 +101,7 @@ const S = {
   environments: [],
   globals: [],
   history: [],
+  cookies: [],
   settings: { theme: "dark", activeEnvironmentId: null, requestPaneHeight: null, sidebarWidth: null, bypassTls: false },
   tabs: [],
   activeTabId: null,
@@ -1148,7 +1149,7 @@ function renderResponse() {
   RESPONSE_TABS.forEach(([key, label]) => {
     let count = null;
     if (key === "headers" && r.ok) count = r.headers.length;
-    if (key === "cookies" && r.ok) count = (r.cookies || []).length;
+    if (key === "cookies" && r.ok) count = (S.cookies || []).length;
     if (key === "tests") count = (t.testResults || []).length;
     if (key === "console") count = (t.logs || []).length;
     tabsEl.appendChild(
@@ -1186,15 +1187,64 @@ function renderResponse() {
     );
     bodyEl.appendChild(table);
   } else if (active === "cookies") {
-    if (!(r.cookies || []).length) bodyEl.appendChild(h("div", { class: "empty-state", text: "No cookies set by this response." }));
-    else {
+    const responseCookies = r.cookies || [];
+    const jarCookies = S.cookies || [];
+    bodyEl.appendChild(h("h4", { class: "section-title", text: "Set by this response" }));
+    if (!responseCookies.length) {
+      bodyEl.appendChild(h("div", { class: "hint", text: "No Set-Cookie headers in this response." }));
+    } else {
       const table = h("table", { class: "kv-table" });
       table.appendChild(h("tr", {}, h("th", { text: "Set-Cookie" })));
-      r.cookies.forEach((c) => table.appendChild(h("tr", {}, h("td", { html: `<span class="code-view">${esc(c)}</span>` }))));
+      responseCookies.forEach((c) => table.appendChild(h("tr", {}, h("td", { html: `<span class="code-view">${esc(c)}</span>` }))));
+      bodyEl.appendChild(table);
+    }
+
+    bodyEl.appendChild(h("h4", { class: "section-title", text: `Cookie jar (${jarCookies.length})` }));
+    if (!jarCookies.length) {
+      bodyEl.appendChild(h("div", { class: "hint", text: "No cookies currently stored." }));
+    } else {
+      const table = h("table", { class: "kv-table" });
+      table.appendChild(
+        h("tr", {},
+          h("th", { text: "Name" }), h("th", { text: "Value" }), h("th", { text: "Domain" }),
+          h("th", { text: "Path" }), h("th", { text: "Expires" }), h("th", { text: "Flags" }), h("th", {})
+        )
+      );
+      jarCookies.forEach((c) => {
+        const flags = [c.httpOnly ? "HttpOnly" : "", c.secure ? "Secure" : "", c.sameSite ? "SameSite=" + c.sameSite : ""].filter(Boolean).join(", ") || "—";
+        table.appendChild(
+          h("tr", {},
+            h("td", { html: `<span class="code-view">${esc(c.name)}</span>` }),
+            h("td", { html: `<span class="code-view">${esc(c.value)}</span>` }),
+            h("td", { html: `<span class="code-view">${esc(c.domain)}</span>` }),
+            h("td", { html: `<span class="code-view">${esc(c.path || "/")}</span>` }),
+            h("td", { text: c.expires ? new Date(c.expires).toLocaleString() : "Session" }),
+            h("td", { text: flags }),
+            h("td", { class: "actions" }, h("button", {
+              class: "icon",
+              title: "Remove cookie",
+              text: "✕",
+              onclick: async () => {
+                S.cookies = await api.cookies.remove({ name: c.name, domain: c.domain, path: c.path });
+                renderResponse();
+                toast("Cookie removed", "ok");
+              },
+            }))
+          )
+        );
+      });
       bodyEl.appendChild(table);
     }
     bodyEl.appendChild(
-      h("button", { class: "ghost", text: "Clear cookie jar", onclick: async () => { await api.cookies.clear(); toast("Cookie jar cleared", "ok"); } })
+      h("button", {
+        class: "ghost",
+        text: "Clear cookie jar",
+        onclick: async () => {
+          S.cookies = await api.cookies.clear();
+          renderResponse();
+          toast("Cookie jar cleared", "ok");
+        },
+      })
     );
   } else if (active === "tests") {
     if (!(t.testResults || []).length) bodyEl.appendChild(h("div", { class: "empty-state", text: "No tests were executed for this request." }));
@@ -2399,6 +2449,7 @@ function openRunnerModal(target) {
           if (idx >= 0) S.environments[idx] = sent.environment;
         }
         if (sent.globals) S.globals = sent.globals;
+        if (sent.cookies) S.cookies = sent.cookies;
         const rr = sent.response || {};
         const tests = sent.testResults || [];
         const failed = tests.filter((x) => !x.passed).length;
@@ -2723,6 +2774,7 @@ async function sendActive() {
       if (idx >= 0) S.environments[idx] = res.environment;
     }
     if (res.globals) S.globals = res.globals;
+    if (res.cookies) S.cookies = res.cookies;
     addHistory(t);
     renderResponse();
     renderRequestPane();
@@ -2920,6 +2972,7 @@ async function boot() {
   S.environments = all.environments || [];
   S.globals = all.globals || [];
   S.history = all.history || [];
+  S.cookies = all.cookies || [];
   S.settings = Object.assign(S.settings, all.settings || {});
 
   if (all.session && Array.isArray(all.session.tabs) && all.session.tabs.length) {

@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("api", {
   runScript: (payload) => ipcRenderer.invoke("script:run", payload),
   cookies: {
     clear: () => ipcRenderer.invoke("cookies:clear"),
+    list: () => ipcRenderer.invoke("cookies:list"),
+    remove: (payload) => ipcRenderer.invoke("cookies:remove", payload),
   },
   io: {
     importPostman: (text) => ipcRenderer.invoke("io:import-postman", { text }),

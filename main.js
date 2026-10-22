@@ -114,6 +114,7 @@ async function handleSend(payload) {
   persist("cookies", getJar().list());
   return {
     response,
+    cookies: getJar().list(),
     testResults,
     logs,
     environment: env || null,
@@ -189,6 +190,14 @@ function registerIpc() {
     getJar().clear();
     persist("cookies", []);
     return [];
+  });
+  ipcMain.handle("cookies:list", () => getJar().list());
+  ipcMain.handle("cookies:remove", (_e, payload) => {
+    if (!payload) return getJar().list();
+    getJar().remove(payload.name, payload.domain, payload.path);
+    const list = getJar().list();
+    persist("cookies", list);
+    return list;
   });
 
   ipcMain.handle("script:run", (_e, payload) => {
