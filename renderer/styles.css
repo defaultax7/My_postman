@@ -164,6 +164,13 @@ body.resizing-sidebar, body.resizing-sidebar * { cursor: col-resize !important; 
 
 textarea.code { width: 100%; min-height: 220px; font-family: var(--mono); font-size: 12px; white-space: pre; resize: vertical; }
 pre.code-view { margin: 0; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.json-key { color: #9cdcfe; }
+.json-string { color: #6bd968; }
+.json-number { color: #b5cea8; }
+.json-boolean { color: #e6c84a; }
+.json-null { color: var(--fg-faint); }
+.json-field { cursor: context-menu; border-radius: 2px; }
+.json-field:hover { background: rgba(255,108,55,.14); box-shadow: 0 0 0 1px rgba(255,108,55,.2); }
 iframe.preview { width: 100%; height: 100%; min-height: 320px; border: 1px solid var(--border); background: #fff; border-radius: 4px; }
 
 .tree { user-select: none; }

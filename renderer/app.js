@@ -1209,17 +1209,97 @@ function renderResponse() {
   }
 }
 
-function highlightJson(text) {
-  const safe = esc(text);
-  return safe.replace(
-    /(&quot;(?:\\.|[^&])*?&quot;)(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
-    (m, str, colon, bool, num) => {
-      if (str) return colon ? `<span style="color:#9cdcfe">${str}</span>${colon}` : `<span style="color:#6bd968">${str}</span>`;
-      if (bool) return `<span style="color:#e6c84a">${bool}</span>`;
-      if (num) return `<span style="color:#b5cea8">${num}</span>`;
-      return m;
-    }
-  );
+function jsonPathAttr(path) {
+  return ` data-json-path="${esc(JSON.stringify(path))}"`;
+}
+
+function renderJsonHtml(value, path, depth) {
+  const pad = "  ".repeat(depth);
+  if (value === null) return `<span class="json-value json-null json-field"${jsonPathAttr(path)}>null</span>`;
+  if (typeof value === "string") {
+    return `<span class="json-value json-string json-field"${jsonPathAttr(path)}>${esc(JSON.stringify(value))}</span>`;
+  }
+  if (typeof value === "number") {
+    return `<span class="json-value json-number json-field"${jsonPathAttr(path)}>${esc(JSON.stringify(value))}</span>`;
+  }
+  if (typeof value === "boolean") {
+    return `<span class="json-value json-boolean json-field"${jsonPathAttr(path)}>${value ? "true" : "false"}</span>`;
+  }
+  if (Array.isArray(value)) {
+    if (!value.length) return `<span class="json-punct json-field"${jsonPathAttr(path)}>[]</span>`;
+    const inner = value
+      .map((item, index) => "  ".repeat(depth + 1) + renderJsonHtml(item, path.concat(index), depth + 1))
+      .join(",\n");
+    return `<span class="json-punct json-field"${jsonPathAttr(path)}>[</span>\n${inner}\n${pad}<span class="json-punct json-field"${jsonPathAttr(path)}>]</span>`;
+  }
+  if (typeof value === "object") {
+    const keys = Object.keys(value);
+    if (!keys.length) return `<span class="json-punct json-field"${jsonPathAttr(path)}>{}</span>`;
+    const inner = keys
+      .map((key) => {
+        const childPath = path.concat(key);
+        return (
+          "  ".repeat(depth + 1) +
+          `<span class="json-key json-field"${jsonPathAttr(childPath)} data-json-key="${esc(key)}">${esc(JSON.stringify(key))}</span>: ` +
+          renderJsonHtml(value[key], childPath, depth + 1)
+        );
+      })
+      .join(",\n");
+    return `<span class="json-punct json-field"${jsonPathAttr(path)}>{</span>\n${inner}\n${pad}<span class="json-punct json-field"${jsonPathAttr(path)}>}</span>`;
+  }
+  return esc(String(value));
+}
+
+function getJsonPath(root, path) {
+  let current = root;
+  for (const part of path) {
+    if (current === null || typeof current !== "object" || !Object.prototype.hasOwnProperty.call(current, part)) return undefined;
+    current = current[part];
+  }
+  return current;
+}
+
+function jsonPathLabel(path) {
+  if (!path.length) return "$";
+  return "$" + path.map((part) => {
+    if (typeof part === "number") return `[${part}]`;
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(part) ? `.${part}` : `[${JSON.stringify(part)}]`;
+  }).join("");
+}
+
+async function copyJsonText(text, label) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(label + " copied", "ok");
+  } catch (e) {
+    toast("Copy failed: " + e.message, "error");
+  }
+}
+
+function copyJsonValue(value, asJson) {
+  let text;
+  if (asJson) text = JSON.stringify(value);
+  else if (typeof value === "string") text = value;
+  else if (value !== null && typeof value === "object") text = JSON.stringify(value, null, 2);
+  else text = String(value);
+  copyJsonText(text, asJson ? "JSON value" : "Value");
+}
+
+function attachJsonFieldCopy(pre, rootValue) {
+  pre.addEventListener("contextmenu", (event) => {
+    const target = event.target.closest(".json-field");
+    if (!target) return;
+    let path;
+    try { path = JSON.parse(target.dataset.jsonPath || "[]"); } catch (_) { return; }
+    const value = getJsonPath(rootValue, path);
+    if (value === undefined && path.length) return;
+    const entries = [
+      { label: "Copy value", icon: "⧉", action: () => copyJsonValue(value, false) },
+      { label: "Copy value as JSON", icon: "{}", action: () => copyJsonValue(value, true) },
+      { label: "Copy JSON path", icon: "⌁", action: () => copyJsonText(jsonPathLabel(path), "JSON path") },
+    ];
+    openContextMenu(event, entries);
+  });
 }
 
 function renderResponseBody(root, t, r) {
@@ -1283,11 +1363,24 @@ function renderResponseBody(root, t, r) {
     root.appendChild(iframe);
   } else {
     let pretty = text;
+    let parsedJson;
+    let isJson = false;
     const mime = (r.body.mime || "").toLowerCase();
     if (mime.includes("json") || /^\s*[[{]/.test(text)) {
-      try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (_) {}
+      try {
+        parsedJson = JSON.parse(text);
+        pretty = JSON.stringify(parsedJson, null, 2);
+        isJson = true;
+      } catch (_) {}
     }
-    root.appendChild(h("pre", { class: "code-view", html: mime.includes("json") ? highlightJson(pretty) : esc(pretty) }));
+    if (isJson) {
+      root.appendChild(h("div", { class: "hint", style: "margin-bottom:6px", text: "Right-click a JSON field to copy its value or path." }));
+      const pre = h("pre", { class: "code-view json-view", html: renderJsonHtml(parsedJson, [], 0) });
+      attachJsonFieldCopy(pre, parsedJson);
+      root.appendChild(pre);
+    } else {
+      root.appendChild(h("pre", { class: "code-view", text: pretty }));
+    }
   }
 }
 

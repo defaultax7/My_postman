@@ -113,6 +113,12 @@ ws.onopen = async () => {
   check("response body rendered", /rea-offline-test/.test(bodyText || ""), bodyText && bodyText.slice(0, 200));
   check("history recorded", (await evalJs("S.history.length")) >= 1);
 
+  console.log("JSON field copy menu");
+  const jsonFieldMenu = await evalJs("(()=>{const field=document.querySelector('.json-view [data-json-key=path]');if(!field) return 'missing';field.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:350,clientY:300}));return JSON.stringify({path:field.dataset.jsonPath,labels:[...document.querySelectorAll('.context-menu .context-item')].map(el=>el.textContent.trim())})})()");
+  check("JSON field context menu offers copy actions", /Copy value/.test(jsonFieldMenu || "") && /Copy value as JSON/.test(jsonFieldMenu || "") && /Copy JSON path/.test(jsonFieldMenu || ""), jsonFieldMenu);
+  await evalJs("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); 'ok'");
+  await sleep(200);
+
   console.log("history stores request + response");
   const histSnapshot = await evalJs("JSON.stringify({status:S.history[0].response && S.history[0].response.status, hasBody: !!(S.history[0].response && S.history[0].response.body && S.history[0].response.body.text), size: S.history[0].response && S.history[0].response.body && S.history[0].response.body.size, durationMs: S.history[0].durationMs})");
   check("history snapshot has response", /"status":200/.test(histSnapshot || "") && /"hasBody":true/.test(histSnapshot || ""), histSnapshot);
