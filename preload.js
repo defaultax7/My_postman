@@ -27,5 +27,16 @@ contextBridge.exposeInMainWorld("api", {
   onMenu: (callback) => {
     ipcRenderer.on("menu", (_event, message) => callback(message));
   },
+  window: {
+    minimize: () => ipcRenderer.send("window:minimize"),
+    toggleMaximize: () => ipcRenderer.send("window:toggle-maximize"),
+    close: () => ipcRenderer.send("window:close"),
+    isMaximized: () => ipcRenderer.invoke("window:is-maximized"),
+    onState: (callback) => {
+      const handler = (_event, state) => callback(state);
+      ipcRenderer.on("window:state", handler);
+      return () => ipcRenderer.removeListener("window:state", handler);
+    },
+  },
   platform: process.platform,
 });

@@ -43,6 +43,14 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 #topbar .brand { font-weight: 700; letter-spacing: .2px; display: flex; align-items: center; gap: 8px; }
 #topbar .logo { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); display: inline-block; }
 .topbar-actions { display: flex; gap: 8px; align-items: center; -webkit-app-region: no-drag; }
+.window-controls { display: flex; align-items: center; gap: 2px; margin-left: 2px; -webkit-app-region: no-drag; }
+.window-control {
+  display: flex; align-items: center; justify-content: center; width: 34px; height: 30px; padding: 0;
+  border: none; border-radius: 4px; background: transparent; color: var(--fg-dim);
+  font-family: var(--sans); font-size: 15px; line-height: 1;
+}
+.window-control:hover { background: var(--bg-3); color: var(--fg); }
+.window-control.close:hover { background: #c42b1c; color: #fff; }
 #btn-settings.ssl-bypass-on { color: var(--yellow); }
 #env-select { min-width: 160px; }
 

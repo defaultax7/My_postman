@@ -148,6 +148,20 @@ function applyMutations(env, globals, result) {
 
 /* --------------------------------------------------------------- IPC wiring */
 function registerIpc() {
+  const windowFor = (event) => BrowserWindow.fromWebContents(event.sender);
+  ipcMain.on("window:minimize", (event) => { const win = windowFor(event); if (win) win.minimize(); });
+  ipcMain.on("window:toggle-maximize", (event) => {
+    const win = windowFor(event);
+    if (!win) return;
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
+  ipcMain.on("window:close", (event) => { const win = windowFor(event); if (win) win.close(); });
+  ipcMain.handle("window:is-maximized", (event) => {
+    const win = windowFor(event);
+    return !!win && win.isMaximized();
+  });
+
   ipcMain.handle("app:info", () => ({
     version: app.getVersion(),
     dataDir: DATA_DIR,
@@ -342,6 +356,7 @@ function createWindow() {
     minHeight: 600,
     title: "Postman Replicate",
     backgroundColor: "#1c1c1c",
+    frame: false,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -352,6 +367,11 @@ function createWindow() {
   });
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
   mainWindow.once("ready-to-show", () => mainWindow.show());
+  const sendWindowState = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("window:state", { maximized: mainWindow.isMaximized() });
+  };
+  mainWindow.on("maximize", sendWindowState);
+  mainWindow.on("unmaximize", sendWindowState);
   mainWindow.on("closed", () => { mainWindow = null; });
 }
 

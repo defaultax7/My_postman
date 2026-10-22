@@ -2560,13 +2560,29 @@ function wireShortcuts() {
 }
 
 function wireStaticEvents() {
+  const updateMaximizeButton = (maximized) => {
+    const btn = $("#btn-maximize");
+    if (!btn) return;
+    btn.textContent = maximized ? "❐" : "□";
+    btn.title = maximized ? "Restore" : "Maximize";
+    btn.setAttribute("aria-label", btn.title);
+  };
+  $("#btn-minimize").onclick = () => { if (api.window) api.window.minimize(); };
+  $("#btn-maximize").onclick = () => { if (api.window) api.window.toggleMaximize(); };
+  $("#btn-close").onclick = () => { if (api.window) api.window.close(); };
+  if (api.window) {
+    api.window.onState((state) => updateMaximizeButton(!!(state && state.maximized)));
+    api.window.isMaximized().then(updateMaximizeButton).catch(() => {});
+  }
+  $("#topbar").addEventListener("dblclick", (e) => {
+    if (e.target.closest("button, select, input, .topbar-actions")) return;
+    if (api.window) api.window.toggleMaximize();
+  });
   $("#btn-send").onclick = sendActive;
   $("#btn-save").onclick = saveActiveRequest;
   $("#btn-curl").onclick = openCurlModal;
-  $("#btn-import").onclick = openImportModal;
   $("#btn-settings").onclick = openAppSettings;
   $("#btn-theme").onclick = () => { S.settings.theme = S.settings.theme === "light" ? "dark" : "light"; applyTheme(); saveSettings(); };
-  $("#btn-manage-env").onclick = () => { S.activePanel = "environments"; renderSidebar(); };
   $("#env-select").onchange = (e) => { S.settings.activeEnvironmentId = e.target.value || null; saveSettings(); renderUrlHighlight(); toast("Environment: " + (e.target.selectedOptions[0] || {}).text, "ok"); };
   $("#method").onchange = (e) => { const t = activeTab(); if (t) { t.request.method = e.target.value; e.target.dataset.method = e.target.value; markDirty(t); } };
   const urlInput = $("#url");

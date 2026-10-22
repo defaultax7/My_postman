@@ -68,6 +68,22 @@ ws.onopen = async () => {
   check("renderer booted", booted);
   if (!booted) return finish();
 
+  console.log("custom window controls");
+  const windowControls = await evalJs("JSON.stringify({min:!!document.querySelector('#btn-minimize'),max:!!document.querySelector('#btn-maximize'),close:!!document.querySelector('#btn-close'),outerDiff:outerHeight-innerHeight})");
+  check("minimize/maximize/close controls are in the top bar", /"min":true/.test(windowControls || "") && /"max":true/.test(windowControls || "") && /"close":true/.test(windowControls || ""), windowControls);
+  check("top-bar Import/Environments buttons are removed", (await evalJs("!document.querySelector('#btn-import') && !document.querySelector('#btn-manage-env')")) === true);
+  check("native title bar is removed", /"outerDiff":[01]/.test(windowControls || ""), windowControls);
+  const wasMaximized = await evalJs("api.window.isMaximized()");
+  await evalJs("document.querySelector('#btn-maximize').click(); 'ok'");
+  await sleep(600);
+  const isMaximized = await evalJs("api.window.isMaximized()");
+  const maximizeLabel = await evalJs("document.querySelector('#btn-maximize').textContent");
+  check("maximize button toggles the window", isMaximized === !wasMaximized && maximizeLabel === (isMaximized ? "❐" : "□"), JSON.stringify({ wasMaximized, isMaximized, maximizeLabel }));
+  if (isMaximized !== wasMaximized) {
+    await evalJs("document.querySelector('#btn-maximize').click(); 'ok'");
+    await sleep(600);
+  }
+
   console.log("no automatic empty tab");
   await evalJs("(()=>{S.tabs.slice().forEach(t=>closeTab(t.id));return 'ok'})()");
   await sleep(300);
