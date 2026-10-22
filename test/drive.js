@@ -84,6 +84,17 @@ ws.onopen = async () => {
     await sleep(600);
   }
 
+  console.log("resizable sidebar");
+  await evalJs("S.settings.sidebarWidth=null;applySidebarWidth(null);saveSettings();'ok'");
+  await sleep(200);
+  const sidebarDrag = await evalJs("(()=>{const s=document.querySelector('#sidebar');const h=document.querySelector('#sidebar-resizer');const start=s.getBoundingClientRect().width;const r=h.getBoundingClientRect();h.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,clientX:r.left+2,clientY:r.top+50}));document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:r.left+102,clientY:r.top+50}));document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,clientX:r.left+102,clientY:r.top+50}));return JSON.stringify({start,width:s.getBoundingClientRect().width,setting:S.settings.sidebarWidth,dragging:h.classList.contains('dragging'),resizing:document.body.classList.contains('resizing-sidebar')})})()");
+  const sidebarState = JSON.parse(sidebarDrag || "{}");
+  check("dragging the splitter resizes the sidebar", sidebarState.width >= sidebarState.start + 90 && sidebarState.width <= sidebarState.start + 110, sidebarDrag);
+  check("sidebar width is saved", Math.abs(sidebarState.setting - sidebarState.width) < 2, sidebarDrag);
+  check("sidebar drag ends cleanly", sidebarState.dragging === false && sidebarState.resizing === false, sidebarDrag);
+  const sidebarReset = await evalJs("(()=>{document.querySelector('#sidebar-resizer').dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true}));return JSON.stringify({width:document.querySelector('#sidebar').getBoundingClientRect().width,setting:S.settings.sidebarWidth})})()");
+  check("double-click resets the sidebar width", /"width":290/.test(sidebarReset || "") && /"setting":null/.test(sidebarReset || ""), sidebarReset);
+
   console.log("no automatic empty tab");
   await evalJs("(()=>{S.tabs.slice().forEach(t=>closeTab(t.id));return 'ok'})()");
   await sleep(300);

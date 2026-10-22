@@ -55,8 +55,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 #env-select { min-width: 160px; }
 
 #layout { display: flex; height: calc(100% - 44px); }
-#sidebar { width: 290px; min-width: 200px; background: var(--bg-2); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
-#sidebar.collapsed { width: 0; overflow: hidden; border: none; }
+#sidebar { width: 290px; min-width: 180px; flex: 0 0 auto; background: var(--bg-2); display: flex; flex-direction: column; }
+#sidebar.collapsed { width: 0; overflow: hidden; }
+#sidebar-resizer { flex: 0 0 5px; align-self: stretch; cursor: col-resize; background: var(--bg-2); border-right: 1px solid var(--border); z-index: 5; }
+#sidebar-resizer:hover, #sidebar-resizer.dragging { background: var(--accent); border-right-color: var(--accent); }
+body.resizing-sidebar, body.resizing-sidebar * { cursor: col-resize !important; user-select: none; }
 .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
 .sidebar-tabs button { flex: 1; border: none; border-radius: 0; background: transparent; color: var(--fg-dim); padding: 8px 4px; border-bottom: 2px solid transparent; }
 .sidebar-tabs button.active { color: var(--fg); border-bottom-color: var(--accent); }

@@ -101,7 +101,7 @@ const S = {
   environments: [],
   globals: [],
   history: [],
-  settings: { theme: "dark", activeEnvironmentId: null, requestPaneHeight: null, bypassTls: false },
+  settings: { theme: "dark", activeEnvironmentId: null, requestPaneHeight: null, sidebarWidth: null, bypassTls: false },
   tabs: [],
   activeTabId: null,
   activePanel: "collections",
@@ -150,6 +150,21 @@ function saveHistory() { return api.store.save("history", S.history); }
 /* -------------------------------------------------------------------- theme */
 function applyTheme() {
   document.body.className = S.settings.theme === "light" ? "theme-light" : "theme-dark";
+}
+
+function sidebarMaxWidth() {
+  return Math.max(180, Math.min(720, window.innerWidth * 0.6));
+}
+
+function applySidebarWidth(width) {
+  const sidebar = $("#sidebar");
+  if (!sidebar) return;
+  const numeric = Number(width);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    sidebar.style.width = "";
+    return;
+  }
+  sidebar.style.width = Math.max(180, Math.min(sidebarMaxWidth(), numeric)) + "px";
 }
 
 /* --------------------------------------------------------------------- tabs */
@@ -2649,6 +2664,40 @@ function wireStaticEvents() {
       document.addEventListener("mouseup", up);
     });
   }
+
+  const sidebarResizer = $("#sidebar-resizer");
+  if (sidebarResizer) {
+    sidebarResizer.addEventListener("mousedown", (down) => {
+      down.preventDefault();
+      const sidebar = $("#sidebar");
+      const startX = down.clientX;
+      const startWidth = sidebar.getBoundingClientRect().width;
+      sidebarResizer.classList.add("dragging");
+      document.body.classList.add("resizing-sidebar");
+      const move = (ev) => {
+        const next = Math.max(180, Math.min(sidebarMaxWidth(), startWidth + ev.clientX - startX));
+        sidebar.style.width = next + "px";
+        S.settings.sidebarWidth = Math.round(next);
+      };
+      const up = () => {
+        document.removeEventListener("mousemove", move);
+        document.removeEventListener("mouseup", up);
+        sidebarResizer.classList.remove("dragging");
+        document.body.classList.remove("resizing-sidebar");
+        saveSettings();
+      };
+      document.addEventListener("mousemove", move);
+      document.addEventListener("mouseup", up);
+    });
+    sidebarResizer.addEventListener("dblclick", () => {
+      S.settings.sidebarWidth = null;
+      applySidebarWidth(null);
+      saveSettings();
+    });
+  }
+  window.addEventListener("resize", () => {
+    if (S.settings.sidebarWidth) applySidebarWidth(S.settings.sidebarWidth);
+  });
 }
 
 function syncParamsFromUrl(t) {
@@ -2734,6 +2783,7 @@ async function boot() {
     $("#request-pane").style.height = S.settings.requestPaneHeight + "px";
     $("#request-pane").style.flex = "0 0 auto";
   }
+  if (S.settings.sidebarWidth) applySidebarWidth(S.settings.sidebarWidth);
   document.title = "Postman Replicate";
 }
 
