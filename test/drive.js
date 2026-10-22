@@ -64,9 +64,18 @@ ws.onopen = async () => {
   await send("Log.enable");
 
   console.log("boot");
-  const booted = await waitFor("typeof S !== 'undefined' && S.collections !== undefined && !!document.querySelector('#btn-send') && S.tabs.length > 0", 15000, "renderer boot");
+  const booted = await waitFor("typeof S !== 'undefined' && S.collections !== undefined && !!document.querySelector('#btn-send') && Array.isArray(S.tabs)", 15000, "renderer boot");
   check("renderer booted", booted);
   if (!booted) return finish();
+
+  console.log("no automatic empty tab");
+  await evalJs("(()=>{S.tabs.slice().forEach(t=>closeTab(t.id));return 'ok'})()");
+  await sleep(300);
+  check("closing all tabs leaves no blank tab", (await evalJs("S.tabs.length")) === 0 && (await evalJs("S.activeTabId")) === null);
+  check("empty workspace is shown", /No request open/.test(await evalJs("document.querySelector('#request-body').innerText")));
+  await evalJs("newTab(); 'ok'");
+  await sleep(300);
+  check("new request reopens the workspace", (await evalJs("S.tabs.length")) === 1 && (await evalJs("document.querySelector('#url').disabled")) === false, await evalJs("JSON.stringify({tabs:S.tabs.length,urlDisabled:document.querySelector('#url').disabled})"));
 
   console.log("send request through the UI");
   await evalJs(`(()=>{const u=document.querySelector('#url');u.value=${JSON.stringify(BASE + "/hello?x=1")};u.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#btn-send').click();return true})()`);
@@ -332,12 +341,15 @@ ws.onopen = async () => {
   }
 
   console.log("persistence (reload)");
+  await evalJs("newTab(); 'ok'");
+  await sleep(200);
   await evalJs("saveSession()");
   await sleep(400);
   await evalJs("location.reload()");
   await sleep(1500);
-  const restored = await waitFor("typeof S !== 'undefined' && S.collections.length >= 1 && S.environments.length >= 1 && S.tabs.length >= 1", 15000, "reload boot");
+  const restored = await waitFor("typeof S !== 'undefined' && S.collections.length >= 1 && S.environments.length >= 1 && Array.isArray(S.tabs)", 15000, "reload boot");
   check("state restored after reload", restored);
+  check("blank tabs are not restored", (await evalJs("S.tabs.some(t=>!t.saved&&!t.dirty&&!t.request.url)")) === false, await evalJs("JSON.stringify(S.tabs.map(t=>({name:t.name,url:t.request.url,saved:t.saved})))"));
   const state = await evalJs("JSON.stringify({tabs:S.tabs.length, cols:S.collections.length, items:S.collections[0].items.length, envs:S.environments.length, history:S.history.length})");
   console.log("       state:", state);
 

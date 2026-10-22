@@ -181,13 +181,28 @@ function closeTab(id) {
     const next = S.tabs[Math.min(idx, S.tabs.length - 1)];
     S.activeTabId = next ? next.id : null;
   }
-  if (!S.tabs.length) newTab();
-  else renderAll();
+  if (!S.tabs.length) S.activeTabId = null;
+  renderAll();
   scheduleSessionSave();
 }
 
 function openInTab(request, options) {
   newTab(clone(request), options);
+}
+
+function isBlankRequestTab(tab) {
+  const r = tab && tab.request;
+  if (!r || tab.saved || tab.dirty) return false;
+  if (r.url || r.description) return false;
+  if ((r.method || "GET") !== "GET") return false;
+  if ((r.params || []).length || (r.headers || []).length) return false;
+  if (r.body && r.body.mode && r.body.mode !== "none") return false;
+  if (r.body && r.body.raw && r.body.raw.text) return false;
+  if (r.scripts && (r.scripts.preRequest || r.scripts.tests)) return false;
+  if (r.auth && r.auth.type && r.auth.type !== "none") return false;
+  const tls = r.settings && r.settings.tls;
+  if (tls && (tls.clientCert || tls.caPath || tls.certPath || tls.keyPath || tls.pfxPath)) return false;
+  return true;
 }
 
 /* ------------------------------------------------------------- kv table UI */
@@ -315,7 +330,11 @@ function syncUrlHighlightScroll() {
 function renderUrlHighlight() {
   const t = activeTab();
   const mirror = $("#url-highlight");
-  if (!t || !mirror) return;
+  if (!mirror) return;
+  if (!t) {
+    mirror.textContent = "";
+    return;
+  }
   const text = t.request.url || "";
   mirror.textContent = "";
   const re = /\{\{\s*([^{}]+?)\s*\}\}/g;
@@ -508,7 +527,35 @@ function renderRequestTabs() {
 
 function renderRequestPane() {
   const t = activeTab();
-  if (!t) return;
+  if (!t) {
+    $("#method").value = "GET";
+    $("#method").dataset.method = "GET";
+    $("#method").disabled = true;
+    $("#url").value = "";
+    $("#url").disabled = true;
+    $("#btn-send").disabled = true;
+    $("#btn-save").disabled = true;
+    $("#btn-curl").disabled = true;
+    renderUrlHighlight();
+    $("#request-tabs").textContent = "";
+    const empty = $("#request-body");
+    empty.textContent = "";
+    empty.appendChild(
+      h(
+        "div",
+        { class: "empty-state" },
+        h("div", { text: "No request open" }),
+        h("div", { class: "hint", text: "Choose a saved request or create a new one." }),
+        h("button", { class: "primary", style: "margin-top:10px", text: "New Request", onclick: () => newTab() })
+      )
+    );
+    return;
+  }
+  $("#method").disabled = false;
+  $("#url").disabled = false;
+  $("#btn-send").disabled = false;
+  $("#btn-save").disabled = false;
+  $("#btn-curl").disabled = false;
   $("#method").value = t.request.method;
   $("#method").dataset.method = t.request.method;
   $("#url").value = t.request.url;
@@ -957,7 +1004,7 @@ function renderResponse() {
   tabsEl.textContent = "";
   if (!t || !t.response) {
     meta.className = "empty";
-    meta.textContent = "Send a request to see the response";
+    meta.textContent = t ? "Send a request to see the response" : "No request open";
     bodyEl.className = "empty-body";
     bodyEl.textContent = "";
     return;
@@ -2614,7 +2661,7 @@ async function boot() {
   S.settings = Object.assign(S.settings, all.settings || {});
 
   if (all.session && Array.isArray(all.session.tabs) && all.session.tabs.length) {
-    S.tabs = all.session.tabs.map((t) => ({
+    const restored = all.session.tabs.map((t) => ({
       id: t.id || uid("tab"),
       name: t.name || "Untitled Request",
       request: normalizeRequest(t.request),
@@ -2625,20 +2672,13 @@ async function boot() {
       saved: t.saved || null,
       dirty: !!t.dirty,
     }));
-    S.activeTabId = all.session.activeTabId && S.tabs.some((t) => t.id === all.session.activeTabId) ? all.session.activeTabId : S.tabs[0].id;
+    S.tabs = restored.filter((t) => !isBlankRequestTab(t));
+    S.activeTabId = S.tabs.length
+      ? (all.session.activeTabId && S.tabs.some((t) => t.id === all.session.activeTabId) ? all.session.activeTabId : S.tabs[0].id)
+      : null;
   } else {
-    S.tabs = [{
-      id: uid("tab"),
-      name: "Untitled Request",
-      request: normalizeRequest(blankRequest()),
-      response: null,
-      testResults: [],
-      logs: [],
-      sessionVariables: {},
-      saved: null,
-      dirty: false,
-    }];
-    S.activeTabId = S.tabs[0].id;
+    S.tabs = [];
+    S.activeTabId = null;
   }
 
   applyTheme();
