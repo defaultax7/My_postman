@@ -183,6 +183,15 @@ ws.onopen = async () => {
   await evalJs("closeTab(S.activeTabId); 'ok'");
   await sleep(300);
 
+  console.log("collection search");
+  const searchResults = await evalJs("(()=>{const input=document.querySelector('#collection-search');input.value='hello';input.dispatchEvent(new Event('input',{bubbles:true}));const rows=[...document.querySelectorAll('#collection-tree .search-result')];return JSON.stringify({rows:rows.length,name:rows[0]&&rows[0].querySelector('.search-result-name').textContent,path:rows[0]&&rows[0].querySelector('.search-result-path').textContent,clearVisible:!document.querySelector('#btn-clear-collection-search').hidden})})()");
+  check("collection search finds requests", /"rows":1/.test(searchResults || "") && /"name":"Hello Request"/.test(searchResults || "") && /"clearVisible":true/.test(searchResults || ""), searchResults);
+  const noSearchResults = await evalJs("(()=>{const input=document.querySelector('#collection-search');input.value='does-not-exist';input.dispatchEvent(new Event('input',{bubbles:true}));return document.querySelector('#collection-tree').innerText})()");
+  check("collection search shows no-results state", /No matching requests/.test(noSearchResults || ""), noSearchResults);
+  await evalJs("document.querySelector('#btn-clear-collection-search').click(); 'ok'");
+  await sleep(200);
+  check("clearing search restores the collection tree", (await evalJs("document.querySelectorAll('#collection-tree .tree-item').length")) > 0 && (await evalJs("document.querySelector('#btn-clear-collection-search').hidden")) === true);
+
   console.log("header autocomplete");
   await evalJs("(()=>{const t=activeTab();t.requestSubTab='headers';renderRequestPane();return 'ok'})()");
   await sleep(250);

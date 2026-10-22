@@ -30,7 +30,21 @@
         <button data-panel="environments">Env</button>
       </div>
       <div id="sidebar-body">
-        <div class="panel" id="panel-collections"></div>
+        <div class="panel" id="panel-collections">
+          <div class="panel-head">
+            <span>Collections</span>
+            <span class="sidebar-section-actions">
+              <button id="btn-collapse-all" class="icon" title="Collapse all collections and folders">⊟</button>
+              <button id="btn-new-collection" class="icon" title="New collection">＋</button>
+              <button id="btn-import-collection" class="icon" title="Import">⇩</button>
+            </span>
+          </div>
+          <div class="collection-search-bar">
+            <input id="collection-search" type="search" placeholder="Search requests and collections" autocomplete="off" spellcheck="false">
+            <button id="btn-clear-collection-search" class="icon" title="Clear search" aria-label="Clear search">✕</button>
+          </div>
+          <div id="collection-tree"></div>
+        </div>
         <div class="panel" id="panel-history" hidden></div>
         <div class="panel" id="panel-environments" hidden></div>
       </div>

@@ -106,6 +106,7 @@ const S = {
   tabs: [],
   activeTabId: null,
   activePanel: "collections",
+  collectionSearch: "",
   info: null,
   sidebarCollapsed: false,
 };
@@ -1466,26 +1467,79 @@ function collapseAllCollections() {
   renderCollections();
 }
 
-function renderCollections() {
-  const root = $("#panel-collections");
-  root.textContent = "";
-  root.appendChild(
-    h(
-      "div",
-      { class: "panel-head" },
-      h("span", { text: "Collections" }),
+function syncCollectionSearchUI() {
+  const input = $("#collection-search");
+  const clear = $("#btn-clear-collection-search");
+  if (!input) return;
+  if (input.value !== S.collectionSearch) input.value = S.collectionSearch;
+  if (clear) clear.hidden = !S.collectionSearch;
+}
+
+function renderCollectionSearch(root, query) {
+  const terms = String(query).toLowerCase().split(/\s+/).filter(Boolean);
+  const matches = [];
+  for (const collection of S.collections) {
+    const walk = (items, folderPath) => {
+      for (const item of items || []) {
+        if (item.type === "folder") {
+          walk(item.items, folderPath.concat(item.name));
+        } else if (item.request) {
+          const haystack = [
+            item.name,
+            item.description,
+            item.request.method,
+            item.request.url,
+            collection.name,
+            collection.description,
+            folderPath.join(" "),
+          ].join(" ").toLowerCase();
+          if (terms.every((term) => haystack.includes(term))) matches.push({ collection, item, folderPath });
+        }
+      }
+    };
+    walk(collection.items, []);
+  }
+  if (!matches.length) {
+    root.appendChild(h("div", { class: "empty-state", text: "No matching requests." }));
+    return;
+  }
+  let lastCollectionId = null;
+  for (const match of matches) {
+    if (match.collection.id !== lastCollectionId) {
+      lastCollectionId = match.collection.id;
+      root.appendChild(h("div", { class: "search-group", title: match.collection.name, text: match.collection.name }));
+    }
+    const path = [match.collection.name].concat(match.folderPath).join(" / ");
+    root.appendChild(
       h(
-        "span",
-        { class: "sidebar-section-actions" },
-        h("button", { class: "icon", title: "Collapse all collections and folders", text: "⊟", onclick: () => collapseAllCollections() }),
-        h("button", { class: "icon", title: "New collection", text: "＋", onclick: () => newCollection() }),
-        h("button", { class: "icon", title: "Import", text: "⇩", onclick: () => openImportModal() })
+        "div",
+        { class: "tree-item search-result", title: "Open " + match.item.name, onclick: () => openSaved(match.collection, match.item) },
+        methodTag((match.item.request && match.item.request.method) || "GET"),
+        h(
+          "div",
+          { class: "search-result-main" },
+          h("div", { class: "search-result-name", text: match.item.name }),
+          h("div", { class: "search-result-path", title: path, text: path })
+        )
       )
-    )
-  );
+    );
+  }
+  root.appendChild(h("div", { class: "hint search-count", text: `${matches.length} matching request(s)` }));
+}
+
+function renderCollections() {
+  syncCollectionSearchUI();
+  const root = $("#collection-tree");
+  if (!root) return;
+  root.textContent = "";
   if (!S.collections.length) {
     root.appendChild(h("div", { class: "empty-state", text: "No collections yet." }));
     root.appendChild(h("div", { style: "text-align:center" }, h("button", { text: "Create Collection", onclick: () => newCollection() })));
+    return;
+  }
+  const query = String(S.collectionSearch || "").trim();
+  if (query) {
+    renderCollectionSearch(root, query);
     return;
   }
   S.collections.forEach((col) => root.appendChild(renderCollectionNode(col)));
@@ -2835,6 +2889,13 @@ function wireShortcuts() {
     const mod = e.ctrlKey || e.metaKey;
     if (!mod) return;
     if (e.key === "Enter") { e.preventDefault(); sendActive(); }
+    else if (e.key.toLowerCase() === "f" && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      S.activePanel = "collections";
+      renderSidebar();
+      const search = $("#collection-search");
+      if (search) { search.focus(); search.select(); }
+    }
     else if (e.key.toLowerCase() === "s") { e.preventDefault(); saveActiveRequest(); }
     else if (e.key.toLowerCase() === "t") { e.preventDefault(); newTab(); }
     else if (e.key.toLowerCase() === "w") { e.preventDefault(); if (S.activeTabId) closeTab(S.activeTabId); }
@@ -2860,6 +2921,29 @@ function wireStaticEvents() {
     if (e.target.closest("button, select, input, .topbar-actions")) return;
     if (api.window) api.window.toggleMaximize();
   });
+  $("#btn-collapse-all").onclick = collapseAllCollections;
+  $("#btn-new-collection").onclick = newCollection;
+  $("#btn-import-collection").onclick = openImportModal;
+  const collectionSearch = $("#collection-search");
+  collectionSearch.addEventListener("input", () => {
+    S.collectionSearch = collectionSearch.value;
+    renderCollections();
+  });
+  collectionSearch.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      S.collectionSearch = "";
+      collectionSearch.value = "";
+      renderCollections();
+    }
+  });
+  $("#btn-clear-collection-search").onclick = () => {
+    S.collectionSearch = "";
+    collectionSearch.value = "";
+    renderCollections();
+    collectionSearch.focus();
+  };
+  syncCollectionSearchUI();
   $("#btn-send").onclick = sendActive;
   $("#btn-save").onclick = saveActiveRequest;
   $("#btn-curl").onclick = openCurlModal;
