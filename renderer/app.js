@@ -1185,10 +1185,11 @@ function dragHandlers(payload, allowInside) {
     draggable: "true",
     ondragstart: (e) => {
       dragPayload = payload;
+      if (payload.kind === "item") document.body.classList.add("tree-dragging-item");
       try { e.dataTransfer.setData("text/plain", JSON.stringify(payload)); } catch (_) {}
       e.dataTransfer.effectAllowed = "move";
     },
-    ondragend: () => { dragPayload = null; clearDropHints(); },
+    ondragend: () => { dragPayload = null; document.body.classList.remove("tree-dragging-item"); clearDropHints(); },
     ondragover: (e) => {
       if (!dragPayload) return;
       if (dragPayload.kind === "collection" && payload.kind !== "collection") return;
