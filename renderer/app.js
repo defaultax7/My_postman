@@ -249,6 +249,10 @@ function isBlankRequestTab(tab) {
 function kvTable(container, list, opts) {
   opts = opts || {};
   container.textContent = "";
+  const suggestionId = Array.isArray(opts.keySuggestions) && opts.keySuggestions.length ? uid("key-suggest") : null;
+  const datalist = suggestionId
+    ? h("datalist", { id: suggestionId }, ...opts.keySuggestions.map((value) => h("option", { value })))
+    : null;
   const table = h("table", { class: "kv-table" });
   table.appendChild(
     h("tr", {}, h("th", {}), h("th", { text: opts.keyLabel || "Key" }), h("th", { text: opts.valueLabel || "Value" }), h("th", {}))
@@ -269,6 +273,7 @@ function kvTable(container, list, opts) {
       type: "text",
       value: keyVal == null ? "" : keyVal,
       placeholder: opts.keyPlaceholder || "key",
+      list: suggestionId,
       oninput: (e) => { opts.onKey ? opts.onKey(row, e.target.value) : (row.key = e.target.value); markDirty(); },
       onchange: opts.onChange,
     });
@@ -303,6 +308,7 @@ function kvTable(container, list, opts) {
     table.appendChild(tr);
   });
   container.appendChild(table);
+  if (datalist) container.appendChild(datalist);
   container.appendChild(
     h("button", {
       class: "ghost",
@@ -646,11 +652,83 @@ function syncParamsToUrl(t) {
   } catch (_) {}
 }
 
+const COMMON_HTTP_HEADERS = [
+  "Accept",
+  "Accept-Charset",
+  "Accept-Encoding",
+  "Accept-Language",
+  "Authorization",
+  "Cache-Control",
+  "Connection",
+  "Content-Type",
+  "Cookie",
+  "Origin",
+  "Referer",
+  "User-Agent",
+  "X-API-Key",
+  "X-Requested-With",
+  "Content-Disposition",
+  "Content-Encoding",
+  "Content-Language",
+  "Content-Length",
+  "Content-Location",
+  "Content-Range",
+  "Date",
+  "DNT",
+  "ETag",
+  "Expect",
+  "Expires",
+  "Forwarded",
+  "From",
+  "Host",
+  "Idempotency-Key",
+  "If-Match",
+  "If-Modified-Since",
+  "If-None-Match",
+  "If-Range",
+  "If-Unmodified-Since",
+  "Keep-Alive",
+  "Last-Modified",
+  "Link",
+  "Location",
+  "Max-Forwards",
+  "Pragma",
+  "Proxy-Authorization",
+  "Range",
+  "Retry-After",
+  "Server",
+  "Set-Cookie",
+  "Strict-Transport-Security",
+  "TE",
+  "Trailer",
+  "Transfer-Encoding",
+  "Upgrade",
+  "Vary",
+  "Via",
+  "Warning",
+  "WWW-Authenticate",
+  "X-Auth-Token",
+  "X-Correlation-ID",
+  "X-Forwarded-For",
+  "X-Forwarded-Host",
+  "X-Forwarded-Proto",
+  "X-Request-ID",
+  "Traceparent",
+  "Tracestate",
+  "Access-Control-Request-Headers",
+  "Access-Control-Request-Method",
+  "Content-Security-Policy",
+  "Permissions-Policy",
+  "Sec-Fetch-Dest",
+  "Sec-Fetch-Mode",
+  "Sec-Fetch-Site",
+];
+
 function renderHeaders(root, t) {
   root.appendChild(h("div", { class: "hint", text: "Content-Type and Authorization are added automatically for the matching body/auth modes unless set here." }));
   const wrap = h("div");
   root.appendChild(wrap);
-  kvTable(wrap, t.request.headers, { keyPlaceholder: "header", addLabel: "+ Add header" });
+  kvTable(wrap, t.request.headers, { keyPlaceholder: "header", addLabel: "+ Add header", keySuggestions: COMMON_HTTP_HEADERS });
 }
 
 function renderAuth(root, t) {

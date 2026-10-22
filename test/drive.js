@@ -175,6 +175,16 @@ ws.onopen = async () => {
   await evalJs("closeTab(S.activeTabId); 'ok'");
   await sleep(300);
 
+  console.log("header autocomplete");
+  await evalJs("(()=>{const t=activeTab();t.requestSubTab='headers';renderRequestPane();return 'ok'})()");
+  await sleep(250);
+  await evalJs("(()=>{const b=[...document.querySelectorAll('#request-body button')].find(x=>x.textContent.includes('Add header'));b.click();return 'ok'})()");
+  await sleep(250);
+  const headerAutocomplete = await evalJs("(()=>{const input=document.querySelector('#request-body .kv-table input[type=text]');const id=input&&input.getAttribute('list');const list=id&&document.getElementById(id);return JSON.stringify({hasList:!!id,count:list?list.options.length:0,hasContentType:list?[...list.options].some(o=>o.value==='Content-Type'):false,hasAuthorization:list?[...list.options].some(o=>o.value==='Authorization'):false,hasApiKey:list?[...list.options].some(o=>o.value==='X-API-Key'):false})})()");
+  check("header key autocomplete is available", /"hasList":true/.test(headerAutocomplete || "") && /"hasContentType":true/.test(headerAutocomplete || "") && /"hasAuthorization":true/.test(headerAutocomplete || "") && /"hasApiKey":true/.test(headerAutocomplete || ""), headerAutocomplete);
+  await evalJs("(()=>{const t=activeTab();t.request.headers=t.request.headers.filter(h=>h.key||h.value);t.requestSubTab='params';t.dirty=false;renderAll();return 'ok'})()");
+  await sleep(200);
+
   console.log("right-click context menus");
   const requestMenuLabels = await evalJs("(()=>{const row=[...document.querySelectorAll('#panel-collections .tree-item')].find(el=>el.textContent.includes('Hello Request')&&el.querySelector('.m'));row.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:120,clientY:160}));return [...document.querySelectorAll('.context-menu .context-item')].map(el=>el.textContent.trim()).join('|')})()");
   check("request context menu has actions", /Docs/.test(requestMenuLabels || "") && /Duplicate/.test(requestMenuLabels || "") && /Rename/.test(requestMenuLabels || "") && /Delete/.test(requestMenuLabels || ""), requestMenuLabels);
