@@ -144,6 +144,8 @@ ws.onopen = async () => {
   await evalJs(`(()=>{const i=document.querySelector('#modal-root input[type=text]');i.value='My API';document.querySelector('#modal-root button.primary').click();return true})()`);
   await sleep(400);
   check("collection created", (await evalJs("S.collections.length")) === 1, await evalJs("JSON.stringify(S.collections.map(c=>c.name))"));
+  const collapseAllState = await evalJs("(()=>{const b=[...document.querySelectorAll('#panel-collections .panel-head button')].find(x=>x.title.includes('Collapse all'));if(!b)return 'missing';b.click();const collapsed=S.collections.every(c=>c._open===false);S.collections.forEach(c=>c._open=true);renderCollections();return JSON.stringify({button:!!b,collapsed})})()");
+  check("collapse all collections works", /"button":true/.test(collapseAllState || "") && /"collapsed":true/.test(collapseAllState || ""), collapseAllState);
   await evalJs("showSaveModal()");
   await sleep(300);
   await evalJs(`(()=>{const i=document.querySelector('#modal-root input[type=text]');i.value='Hello Request';const sel=document.querySelector('#modal-root select');sel.value=S.collections[0].id;sel.dispatchEvent(new Event('change'));return true})()`);

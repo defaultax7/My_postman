@@ -1449,6 +1449,23 @@ function methodTag(m) {
   return h("span", { class: "m " + m, text: m });
 }
 
+function collapseFolderTree(items) {
+  for (const item of items || []) {
+    if (item.type === "folder") {
+      item._open = false;
+      collapseFolderTree(item.items);
+    }
+  }
+}
+
+function collapseAllCollections() {
+  for (const collection of S.collections) {
+    collection._open = false;
+    collapseFolderTree(collection.items);
+  }
+  renderCollections();
+}
+
 function renderCollections() {
   const root = $("#panel-collections");
   root.textContent = "";
@@ -1460,6 +1477,7 @@ function renderCollections() {
       h(
         "span",
         { class: "sidebar-section-actions" },
+        h("button", { class: "icon", title: "Collapse all collections and folders", text: "⊟", onclick: () => collapseAllCollections() }),
         h("button", { class: "icon", title: "New collection", text: "＋", onclick: () => newCollection() }),
         h("button", { class: "icon", title: "Import", text: "⇩", onclick: () => openImportModal() })
       )
