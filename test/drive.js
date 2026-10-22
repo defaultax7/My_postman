@@ -369,6 +369,21 @@ ws.onopen = async () => {
   const state = await evalJs("JSON.stringify({tabs:S.tabs.length, cols:S.collections.length, items:S.collections[0].items.length, envs:S.environments.length, history:S.history.length})");
   console.log("       state:", state);
 
+  console.log("tab right-click close actions");
+  await evalJs("newTab(); newTab(); 'ok'");
+  await sleep(300);
+  const tabMenuLabels = await evalJs("(()=>{const tabs=[...document.querySelectorAll('#tabs .tab')];tabs[tabs.length-1].dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:200,clientY:45}));return [...document.querySelectorAll('.context-menu .context-item')].map(el=>el.textContent.trim()).join('|')})()");
+  check("tab context menu has close actions", /Close other tabs/.test(tabMenuLabels || "") && /Close all tabs/.test(tabMenuLabels || ""), tabMenuLabels);
+  await evalJs("(()=>{const b=[...document.querySelectorAll('.context-menu .context-item')].find(el=>el.textContent.includes('Close other tabs'));b.click();return 'ok'})()");
+  await sleep(400);
+  check("close other tabs keeps one tab", (await evalJs("S.tabs.length")) === 1, await evalJs("S.tabs.length"));
+  const singleTabMenu = await evalJs("(()=>{const tab=document.querySelector('#tabs .tab');tab.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:200,clientY:45}));const b=[...document.querySelectorAll('.context-menu .context-item')].find(el=>el.textContent.includes('Close other tabs'));return JSON.stringify({disabled:b.disabled,labels:[...document.querySelectorAll('.context-menu .context-item')].map(el=>el.textContent.trim())})})()");
+  check("close other tabs is disabled with one tab", /"disabled":true/.test(singleTabMenu || ""), singleTabMenu);
+  await evalJs("(()=>{const b=[...document.querySelectorAll('.context-menu .context-item')].find(el=>el.textContent.includes('Close all tabs'));b.click();return 'ok'})()");
+  await sleep(400);
+  check("close all tabs leaves no tabs", (await evalJs("S.tabs.length")) === 0 && (await evalJs("S.activeTabId")) === null);
+  check("close all tabs shows the empty workspace", /No request open/.test(await evalJs("document.querySelector('#request-body').innerText")));
+
   finish();
 };
 

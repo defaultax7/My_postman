@@ -182,6 +182,8 @@ iframe.preview { width: 100%; height: 100%; min-height: 320px; border: 1px solid
   background: transparent; border: none; border-radius: 4px; color: var(--fg); text-align: left;
 }
 .context-menu .context-item:hover, .context-menu .context-item:focus { background: var(--bg-4); outline: none; }
+.context-menu .context-item:disabled { opacity: .4; cursor: default; }
+.context-menu .context-item:disabled:hover { background: transparent; }
 .context-menu .context-item .context-icon { width: 16px; flex: 0 0 16px; text-align: center; color: var(--fg-dim); }
 .context-menu .context-item.danger, .context-menu .context-item.danger .context-icon { color: var(--red); }
 .context-menu .context-sep { height: 1px; margin: 4px 6px; background: var(--border-soft); }

@@ -186,6 +186,31 @@ function closeTab(id) {
   scheduleSessionSave();
 }
 
+function closeOtherTabs(id) {
+  const keep = S.tabs.find((t) => t.id === id);
+  if (!keep) return;
+  S.tabs = [keep];
+  S.activeTabId = keep.id;
+  renderAll();
+  scheduleSessionSave();
+}
+
+function closeAllTabs() {
+  S.tabs = [];
+  S.activeTabId = null;
+  renderAll();
+  scheduleSessionSave();
+}
+
+function tabContextMenu(tab) {
+  return [
+    { label: "Close", icon: "✕", action: () => closeTab(tab.id) },
+    { label: "Close other tabs", icon: "⊘", disabled: S.tabs.length < 2, action: () => closeOtherTabs(tab.id) },
+    { separator: true },
+    { label: "Close all tabs", icon: "⊗", danger: true, action: () => closeAllTabs() },
+  ];
+}
+
 function openInTab(request, options) {
   newTab(clone(request), options);
 }
@@ -1391,6 +1416,7 @@ function openContextMenu(event, entries) {
           class: "context-item" + (entry.danger ? " danger" : ""),
           type: "button",
           role: "menuitem",
+          disabled: entry.disabled === true,
           onclick: () => { closeContextMenu(); entry.action(); },
         },
         h("span", { class: "context-icon", text: entry.icon || "" }),
@@ -1411,7 +1437,7 @@ function openContextMenu(event, entries) {
   const onPointerDown = (e) => { if (!menu.contains(e.target)) closeContextMenu(); };
   const onKeyDown = (e) => {
     if (e.key === "Escape") { e.preventDefault(); closeContextMenu(); return; }
-    const items = Array.from(menu.querySelectorAll(".context-item"));
+    const items = Array.from(menu.querySelectorAll(".context-item:not(:disabled)"));
     if (!items.length) return;
     const index = items.indexOf(document.activeElement);
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -1436,7 +1462,7 @@ function openContextMenu(event, entries) {
     window.removeEventListener("resize", dismiss);
     window.removeEventListener("scroll", dismiss, true);
   };
-  const first = menu.querySelector(".context-item");
+  const first = menu.querySelector(".context-item:not(:disabled)");
   if (first) first.focus({ preventScroll: true });
 }
 
@@ -2530,7 +2556,7 @@ function renderTabs() {
     strip.appendChild(
       h(
         "div",
-        { class: "tab" + (t.id === S.activeTabId ? " active" : ""), onclick: () => { S.activeTabId = t.id; renderAll(); } },
+        { class: "tab" + (t.id === S.activeTabId ? " active" : ""), onclick: () => { S.activeTabId = t.id; renderAll(); }, oncontextmenu: (e) => openContextMenu(e, tabContextMenu(t)) },
         h("span", { class: "tab-name", text: (t.dirty ? "● " : "") + t.name }),
         h("button", { class: "icon close", text: "✕", onclick: (e) => { e.stopPropagation(); closeTab(t.id); } })
       )
