@@ -78,10 +78,10 @@ fs.renameSync(path.join(outDir, sourceExe), path.join(outDir, "Postman Replicate
 
 const appDir = path.join(outDir, "resources", "app");
 fs.mkdirSync(appDir, { recursive: true });
-for (const file of ["main.js", "preload.js"]) {
+for (const file of ["main.js", "preload.js", "cli.js", "mcp-server.js"]) {
   fs.copyFileSync(path.join(projectRoot, file), path.join(appDir, file));
 }
-for (const dir of ["lib", "renderer"]) {
+for (const dir of ["lib", "renderer", "docs"]) {
   fs.cpSync(path.join(projectRoot, dir), path.join(appDir, dir), { recursive: true });
 }
 fs.writeFileSync(
@@ -94,6 +94,7 @@ fs.writeFileSync(
       description: pkg.description,
       main: "main.js",
       private: true,
+      scripts: { cli: "node cli.js", mcp: "node mcp-server.js" },
     },
     null,
     2
@@ -117,6 +118,13 @@ fs.writeFileSync(
     "folder contains the Chromium profile/cache.",
     "",
     "To reset the app, close it and delete data and userdata.",
+    "",
+    "AI / automation",
+    "---------------",
+    "Node.js 18+ is required for CLI/MCP integration.",
+    "CLI: node resources\\app\\cli.js --help",
+    "MCP: node resources\\app\\mcp-server.js",
+    "Docs: resources\\app\\docs\\AI-INTEGRATION.md",
     "",
   ].join("\r\n")
 );

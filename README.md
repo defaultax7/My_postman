@@ -36,6 +36,22 @@ package from another Electron distribution instead of `runtime\`. This is a
 portable folder build (one exe plus Electron DLLs/resources), not a single-file
 installer; an installer/one-file exe needs a tool such as electron-builder.
 
+## AI / automation
+
+The app can be driven by external agents without Electron:
+
+- `cli.js` — JSON CLI for collections, environments, sending requests and runs.
+- `mcp-server.js` — MCP stdio server for Claude Desktop and other MCP clients.
+- Full documentation: `docs/AI-INTEGRATION.md`.
+
+Quick start:
+
+    node cli.js list-collections
+    node mcp-server.js
+
+Both use `data\` by default; override with `--data <dir>` or
+`POSTMAN_REPLICATE_DATA`. Close and reopen the desktop app after external edits.
+
 ## Features
 
 - Request builder: method, URL, query params, headers, body (raw JSON/XML/text/JS,
@@ -72,11 +88,12 @@ Tracked source (everything needed for the project):
 
     .gitignore
     package.json  main.js  preload.js
-    Pack-Windows.cmd
-    lib/          engine.js  script.js  io.js  store.js
+    cli.js  mcp-server.js  Pack-Windows.cmd
+    lib/          engine.js  script.js  io.js  store.js  agent.js
     renderer/     index.html  styles.css  app.js
-    test/         smoke.js  drive.js
+    test/         smoke.js  drive.js  agent.js
     tools/        make-runtime.js  package-win.js
+    docs/         AI-INTEGRATION.md
     README.md     MISSING-FEATURES.html
 
 Generated locally and ignored by git:
