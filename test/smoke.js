@@ -1,6 +1,7 @@
 "use strict";
 /* Smoke test for the engine/libs (no Electron needed). Run: node test/smoke.js */
 const http = require("http");
+const net = require("net");
 const engine = require("../lib/engine");
 const io = require("../lib/io");
 const { runScript } = require("../lib/script");
@@ -45,9 +46,59 @@ function localServer() {
   });
 }
 
+function localProxy() {
+  let connects = 0;
+  return new Promise((resolve) => {
+    const proxy = http.createServer((req, res) => {
+      let target;
+      try {
+        target = new URL(req.url);
+      } catch (_) {
+        res.writeHead(400);
+        return res.end("Proxy requires an absolute URL");
+      }
+      const headers = Object.assign({}, req.headers, {
+        "x-proxied": "yes",
+        "x-proxy-auth": req.headers["proxy-authorization"] || "none",
+      });
+      delete headers["proxy-authorization"];
+      const upstream = http.request(
+        { hostname: target.hostname, port: target.port || 80, path: target.pathname + target.search, method: req.method, headers },
+        (response) => {
+          res.writeHead(response.statusCode, response.headers);
+          response.pipe(res);
+        }
+      );
+      upstream.on("error", (error) => {
+        if (!res.headersSent) res.writeHead(502);
+        res.end(error.message);
+      });
+      req.pipe(upstream);
+    });
+    proxy.on("connect", (req, clientSocket, head) => {
+      connects++;
+      const index = req.url.lastIndexOf(":");
+      const host = req.url.slice(0, index);
+      const targetPort = Number(req.url.slice(index + 1));
+      const connectHost = host === "localhost" ? "127.0.0.1" : host;
+      const upstream = net.connect(targetPort, connectHost, () => {
+        clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+        if (head && head.length) upstream.write(head);
+        upstream.pipe(clientSocket);
+        clientSocket.pipe(upstream);
+      });
+      upstream.on("error", () => clientSocket.destroy());
+      clientSocket.on("error", () => upstream.destroy());
+    });
+    proxy.listen(0, "127.0.0.1", () => resolve({ proxy, port: proxy.address().port, connects: () => connects }));
+  });
+}
+
 (async () => {
   const { server, port } = await localServer();
+  const { proxy, port: proxyPort, connects: proxyConnects } = await localProxy();
   const base = `http://127.0.0.1:${port}`;
+  const proxyUrl = `http://user:pass@127.0.0.1:${proxyPort}`;
 
   console.log("variables + execute");
   const scopes = [{ host: base }, { token: "abc123" }, {}, {}];
@@ -95,6 +146,20 @@ function localServer() {
   const jar = new engine.CookieJar([]);
   jar.addFromResponse(["sid=42; Path=/; HttpOnly"], base + "/");
   check("cookie jar match", jar.headerFor(base + "/x") === "sid=42", jar.headerFor(base + "/x"));
+
+  const proxied = await engine.execute(
+    { method: "GET", url: base + "/headers", headers: [], params: [], body: { mode: "none" }, settings: { proxy: { enabled: true, url: proxyUrl } } },
+    { scopes: [] }
+  );
+  const proxiedHeaders = proxied.ok ? JSON.parse(proxied.body.text).headers : {};
+  check("HTTP proxy used", proxied.ok && proxiedHeaders["x-proxied"] === "yes", proxied.ok ? proxiedHeaders : proxied.error);
+  check("proxy credentials sent", /^Basic /.test(proxiedHeaders["x-proxy-auth"] || ""), proxiedHeaders["x-proxy-auth"]);
+  const bypassed = await engine.execute(
+    { method: "GET", url: base + "/headers", headers: [], params: [], body: { mode: "none" }, settings: { proxy: { enabled: true, url: proxyUrl, bypass: "127.0.0.1" } } },
+    { scopes: [] }
+  );
+  const bypassedHeaders = bypassed.ok ? JSON.parse(bypassed.body.text).headers : {};
+  check("proxy bypass list works", bypassed.ok && bypassedHeaders["x-proxied"] === undefined, bypassed.ok ? bypassedHeaders : bypassed.error);
 
   const liveJar = new engine.CookieJar([]);
   const setCookie = await engine.execute(
@@ -259,6 +324,12 @@ function localServer() {
       { scopes: [] }
     );
     check("verifyTls:false bypasses untrusted certificate", bypassTls.ok && bypassTls.status === 200, bypassTls.ok ? bypassTls.body.text : bypassTls.error);
+    const proxiedTls = await engine.execute(
+      { method: "GET", url: untrustedUrl, headers: [], params: [], body: { mode: "none" }, settings: { verifyTls: false, proxy: { enabled: true, url: proxyUrl } } },
+      { scopes: [] }
+    );
+    check("HTTPS proxy CONNECT tunneling works", proxiedTls.ok && proxiedTls.status === 200 && JSON.parse(proxiedTls.body.text).bypassed === true, proxiedTls.ok ? proxiedTls.body.text : proxiedTls.error);
+    check("HTTPS proxy CONNECT was used", proxyConnects() > 0, proxyConnects());
     untrustedServer.close();
     tlsServer.close();
     tlsOk = true;
@@ -266,6 +337,7 @@ function localServer() {
     console.log("  SKIP mTLS tests (openssl unavailable or failed):", e.message.slice(0, 160));
   }
 
+  proxy.close();
   server.close();
   console.log(failures ? `\n${failures} failure(s)` : "\nAll smoke tests passed");
   process.exit(failures ? 1 : 0);

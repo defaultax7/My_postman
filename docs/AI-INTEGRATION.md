@@ -36,6 +36,8 @@ node mcp-server.js --data "C:\path\to\data"
 
 If the desktop app is open, it keeps its own in-memory copy of collections and environments. Close and reopen the app after external edits, and avoid editing from both at the same time.
 
+Global Settings from the desktop app are honored by CLI and MCP sends, including the **SSL verification bypass** and **HTTP/HTTPS proxy** configuration.
+
 ## CLI
 
 All commands print JSON to stdout. Errors go to stderr and return a non-zero exit code.

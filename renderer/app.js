@@ -102,7 +102,7 @@ const S = {
   globals: [],
   history: [],
   cookies: [],
-  settings: { theme: "dark", activeEnvironmentId: null, requestPaneHeight: null, sidebarWidth: null, bypassTls: false },
+  settings: { theme: "dark", activeEnvironmentId: null, requestPaneHeight: null, sidebarWidth: null, bypassTls: false, proxy: { enabled: false, url: "", bypass: "" } },
   tabs: [],
   activeTabId: null,
   activePanel: "collections",
@@ -1056,12 +1056,36 @@ function renderTlsSettings(root, t) {
 function refreshSettingsButton() {
   const btn = $("#btn-settings");
   if (!btn) return;
-  btn.classList.toggle("ssl-bypass-on", S.settings.bypassTls === true);
-  btn.title = S.settings.bypassTls ? "Settings — SSL verification bypass is ON" : "Settings";
+  const sslBypass = S.settings.bypassTls === true;
+  const proxyOn = !!(S.settings.proxy && S.settings.proxy.enabled === true);
+  btn.classList.toggle("ssl-bypass-on", sslBypass);
+  btn.classList.toggle("proxy-on", proxyOn);
+  const states = [];
+  if (sslBypass) states.push("SSL verification bypass ON");
+  if (proxyOn) states.push("proxy ON");
+  btn.title = states.length ? "Settings — " + states.join(", ") : "Settings";
 }
 
 function openAppSettings() {
+  const proxySettings = Object.assign({ enabled: false, url: "", bypass: "" }, S.settings.proxy || {});
   const bypass = h("input", { type: "checkbox", checked: S.settings.bypassTls === true });
+  const proxyEnabled = h("input", { type: "checkbox", checked: proxySettings.enabled === true });
+  const proxyUrl = h("input", { type: "text", value: proxySettings.url || "", placeholder: "http://127.0.0.1:8080 or http://user:pass@host:port", spellcheck: "false" });
+  const proxyBypass = h("input", { type: "text", value: proxySettings.bypass || "", placeholder: "localhost,127.0.0.1,.internal.example.com", spellcheck: "false" });
+  const proxyFields = h(
+    "div",
+    { class: "settings-subfields" },
+    h("div", { class: "field-row" }, h("label", { text: "Proxy URL" }), proxyUrl),
+    h("div", { class: "field-row" }, h("label", { text: "Bypass list" }), proxyBypass),
+    h("div", { class: "hint", text: "Comma-separated hosts/domains that bypass the proxy. HTTPS requests use CONNECT tunneling." })
+  );
+  const syncProxyFields = () => {
+    proxyUrl.disabled = !proxyEnabled.checked;
+    proxyBypass.disabled = !proxyEnabled.checked;
+    proxyFields.classList.toggle("disabled", !proxyEnabled.checked);
+  };
+  proxyEnabled.onchange = syncProxyFields;
+  syncProxyFields();
   const body = h(
     "div",
     {},
@@ -1079,7 +1103,19 @@ function openAppSettings() {
         })
       )
     ),
-    h("div", { class: "banner warn", text: "Disabling certificate verification removes protection against man-in-the-middle attacks." })
+    h(
+      "label",
+      { class: "settings-option" },
+      proxyEnabled,
+      h(
+        "span",
+        {},
+        h("b", { text: "Use HTTP proxy" }),
+        h("div", { class: "hint", text: "Route all requests through an HTTP or HTTPS proxy. Proxy credentials can be included in the URL." })
+      )
+    ),
+    proxyFields,
+    h("div", { class: "banner warn", text: "Disabling certificate verification removes protection against man-in-the-middle attacks. Only use a proxy you trust." })
   );
   openModal({
     title: "Settings",
@@ -1090,12 +1126,27 @@ function openAppSettings() {
         label: "Save",
         primary: true,
         onClick: (close) => {
+          let urlValue = proxyUrl.value.trim();
+          if (proxyEnabled.checked) {
+            if (!urlValue) return toast("Proxy URL is required", "error");
+            if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(urlValue)) urlValue = "http://" + urlValue;
+            try {
+              const parsed = new URL(urlValue);
+              if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("only http:// and https:// proxies are supported");
+            } catch (e) {
+              return toast("Invalid proxy URL: " + e.message, "error");
+            }
+          }
           S.settings.bypassTls = bypass.checked;
+          S.settings.proxy = { enabled: proxyEnabled.checked, url: urlValue, bypass: proxyBypass.value.trim() };
           saveSettings();
           close();
           refreshSettingsButton();
           renderRequestPane();
-          toast(bypass.checked ? "SSL verification bypass enabled — send the request again" : "SSL verification enabled", bypass.checked ? "warn" : "ok");
+          const states = [];
+          if (bypass.checked) states.push("SSL bypass on");
+          if (proxyEnabled.checked) states.push("proxy on");
+          toast(states.length ? "Settings saved — " + states.join(", ") : "Settings saved", bypass.checked ? "warn" : "ok");
         },
       },
     ],

@@ -88,10 +88,13 @@ async function handleSend(payload) {
     Object.assign(session, pre.sessionVariables);
   }
 
+  const engineSettings = {};
+  if (appSettings.bypassTls === true) engineSettings.verifyTls = false;
+  if (appSettings.proxy && appSettings.proxy.enabled === true) engineSettings.proxy = appSettings.proxy;
   const response = await engine.execute(requestForSend, {
     scopes,
     jar: getJar(),
-    settings: appSettings.bypassTls === true ? { verifyTls: false } : undefined,
+    settings: Object.keys(engineSettings).length ? engineSettings : undefined,
   });
 
   if (response.ok && request.scripts && request.scripts.tests) {

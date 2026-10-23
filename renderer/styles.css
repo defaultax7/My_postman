@@ -51,6 +51,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 }
 .window-control:hover { background: var(--bg-3); color: var(--fg); }
 .window-control.close:hover { background: #c42b1c; color: #fff; }
+#btn-settings.proxy-on { color: var(--blue); }
 #btn-settings.ssl-bypass-on { color: var(--yellow); }
 #env-select { min-width: 160px; }
 
@@ -170,6 +171,10 @@ body.resizing-sidebar, body.resizing-sidebar * { cursor: col-resize !important; 
 .settings-option input[type=checkbox] { flex: 0 0 auto; width: 16px; height: 16px; margin: 2px 0 0; }
 .settings-option b { display: block; margin-bottom: 2px; }
 .settings-option .hint { display: block; }
+.settings-subfields { margin: 0 0 10px 26px; }
+.settings-subfields.disabled { opacity: .55; }
+.settings-subfields .field-row { margin-bottom: 6px; }
+.settings-subfields .field-row label { width: 90px; }
 .hint { color: var(--fg-faint); font-size: 12px; }
 
 textarea.code { width: 100%; min-height: 220px; font-family: var(--mono); font-size: 12px; white-space: pre; resize: vertical; }
